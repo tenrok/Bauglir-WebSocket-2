@@ -1,0 +1,3 @@
+[submodule "library/synapse"]
+	path = library/synapse
+	url = https://github.com/tenrok/synapse.git
