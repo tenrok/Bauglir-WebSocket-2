@@ -8,7 +8,6 @@
 | Source code is licenced under original 4-clause BSD licence:                 |
 | http://licence.bauglir.com/bsd4.php                                          |
 |                                                                              |
-|                                                                              |
 | Project download homepage:                                                   |
 |   http://code.google.com/p/bauglir-websocket/                                |
 | Project homepage:                                                            |
@@ -16,15 +15,10 @@
 | WebSocket RFC:                                                               |
 |   http://tools.ietf.org/html/rfc6455                                         |
 |                                                                              |
-|                                                                              |
 |==============================================================================|
 | Requirements: Ararat Synapse (http://www.ararat.cz/synapse/)                 |
 |==============================================================================}
-
-
-
 {
-
 2.0.4
 1/ change: send generic frame SendData public on WSConnection
 2/ pascal bugfix: closing connection issues (e.g. infinite sleep)
@@ -34,21 +28,14 @@
 6/ pascal bugfix: events missing on erratic traffic
 7/ add: make Handschake public property
 
-
 @todo
 * move writing to separate thread
 * test for simultaneous i/o operations
 
-
-
 http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-17
 http://tools.ietf.org/html/rfc6455
 http://dev.w3.org/html5/websockets/#refsFILEAPI
-
 }
-
-
-
 unit WebSocket2;
 
 {$IFDEF FPC}
@@ -62,84 +49,76 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, blcksock, syncobjs,
-  CustomServer2, strutils, character;
+  Classes, SysUtils, blcksock, syncobjs, CustomServer2, StrUtils;
 
 const
   {:Constants section defining what kind of data are sent from one pont to another}
-  {:Continuation frame }
+  {:Continuation frame}
   wsCodeContinuation = $0;
-  {:Text frame }
-  wsCodeText         = $1;
-  {:Binary frame }
-  wsCodeBinary       = $2;
-  {:Close frame }
-  wsCodeClose        = $8;
-  {:Ping frame }
-  wsCodePing         = $9;
-  {:Frame frame }
-  wsCodePong         = $A;
+  {:Text frame}
+  wsCodeText = $1;
+  {:Binary frame}
+  wsCodeBinary = $2;
+  {:Close frame}
+  wsCodeClose = $8;
+  {:Ping frame}
+  wsCodePing = $9;
+  {:Frame frame}
+  wsCodePong = $A;
 
+  {:Constants section defining close codes}
+  {:Normal valid closure, connection purpose was fulfilled}
+  wsCloseNormal = 1000;
+  {:Endpoint is going away (like server shutdown)}
+  wsCloseShutdown = 1001;
+  {:Protocol error}
+  wsCloseErrorProtocol = 1002;
+  {:Unknown frame data type or data type application cannot handle}
+  wsCloseErrorData = 1003;
+  {:Reserved}
+  wsCloseReserved1 = 1004;
+  {:Close received by peer but without any close code. This close code MUST NOT be sent by application.}
+  wsCloseNoStatus = 1005;
+  {:Abnotmal connection shutdown close code. This close code MUST NOT be sent by application.}
+  wsCloseErrorClose = 1006;
+  {:Received text data are not valid UTF-8.}
+  wsCloseErrorUTF8 = 1007;
+  {:Endpoint is terminating the connection because it has received a message that violates its policy. Generic error.}
+  wsCloseErrorPolicy = 1008;
+  {:Too large message received}
+  wsCloseTooLargeMessage = 1009;
+  {:Client is terminating the connection because it has expected the server to negotiate one or more extension, but the server didn't return them in the response message of the WebSocket handshake}
+  wsCloseClientExtensionError = 1010;
+  {:Server is terminating the connection because it encountered an unexpected condition that prevented it from fulfilling the request}
+  wsCloseErrorServerRequest = 1011;
+  {:Connection was closed due to a failure to perform a TLS handshake. This close code MUST NOT be sent by application.}
+  wsCloseErrorTLS = 1015;
 
- {:Constants section defining close codes}
- {:Normal valid closure, connection purpose was fulfilled}
- wsCloseNormal              = 1000;
- {:Endpoint is going away (like server shutdown) }
- wsCloseShutdown            = 1001;
- {:Protocol error }
- wsCloseErrorProtocol       = 1002;
- {:Unknown frame data type or data type application cannot handle }
- wsCloseErrorData           = 1003;
- {:Reserved }
- wsCloseReserved1           = 1004;
- {:Close received by peer but without any close code. This close code MUST NOT be sent by application. }
- wsCloseNoStatus            = 1005;
- {:Abnotmal connection shutdown close code. This close code MUST NOT be sent by application. }
- wsCloseErrorClose          = 1006;
- {:Received text data are not valid UTF-8. }
- wsCloseErrorUTF8           = 1007;
- {:Endpoint is terminating the connection because it has received a message that violates its policy. Generic error. }
- wsCloseErrorPolicy         = 1008;
- {:Too large message received }
- wsCloseTooLargeMessage     = 1009;
- {:Client is terminating the connection because it has expected the server to negotiate one or more extension, but the server didn't return them in the response message of the WebSocket handshake }
- wsCloseClientExtensionError= 1010;
- {:Server is terminating the connection because it encountered an unexpected condition that prevented it from fulfilling the request }
- wsCloseErrorServerRequest  = 1011;
- {:Connection was closed due to a failure to perform a TLS handshake. This close code MUST NOT be sent by application. }
- wsCloseErrorTLS            = 1015;
 type
   TWebSocketCustomConnection = class;
 
-  {:Event procedural type to hook OnOpen events on connection
-  }
-  TWebSocketConnectionEvent = procedure (aSender: TWebSocketCustomConnection) of object;
+  {:Event procedural type to hook OnOpen events on connection}
+  TWebSocketConnectionEvent = procedure(aSender: TWebSocketCustomConnection) of object;
 
   {:Event procedural type to hook OnPing, OnPong events on connection
+  TWebSocketConnectionPingPongEvent = procedure(aSender: TWebSocketCustomConnection; aData: String) of object;}
 
-  TWebSocketConnectionPingPongEvent = procedure (aSender: TWebSocketCustomConnection; aData: string) of object;
-  }
-  {:Event procedural type to hook OnClose event on connection
-  }
-  TWebSocketConnectionClose = procedure (aSender: TWebSocketCustomConnection; aCloseCode: integer; aCloseReason: string; aClosedByPeer: boolean) of object;
+  {:Event procedural type to hook OnClose event on connection}
+  TWebSocketConnectionClose = procedure(aSender: TWebSocketCustomConnection; aCloseCode: Integer;
+    aCloseReason: string; aClosedByPeer: Boolean) of object;
 
-  {:Event procedural type to hook OnRead on OnWrite event on connection
-  }
-  TWebSocketConnectionData = procedure (aSender: TWebSocketCustomConnection; aFinal, aRes1, aRes2, aRes3: boolean; aCode: integer; aData: TMemoryStream) of object;
-  
-  {:Event procedural type to hook OnReadFull
-  }
-  TWebSocketConnectionDataFull = procedure (aSender: TWebSocketCustomConnection; aCode: integer; aData: TMemoryStream) of object;
+  {:Event procedural type to hook OnRead on OnWrite event on connection}
+  TWebSocketConnectionData = procedure(aSender: TWebSocketCustomConnection; aFinal, aRes1, aRes2, aRes3: Boolean;
+    aCode: Integer; aData: TMemoryStream) of object;
+
+  {:Event procedural type to hook OnReadFull}
+  TWebSocketConnectionDataFull = procedure(aSender: TWebSocketCustomConnection; aCode: Integer; aData: TMemoryStream) of object;
 
   {:abstract(WebSocket connection)
     class is parent class for server and client connection 
   }
   TWebSocketCustomConnection = class(TCustomConnection)
-  private
-
-
   protected
-
     fOnRead: TWebSocketConnectionData;
     fOnReadFull: TWebSocketConnectionDataFull;
     fOnWrite: TWebSocketConnectionData;
@@ -147,9 +126,8 @@ type
     fOnOpen: TWebSocketConnectionEvent;
     //fOnPing: TWebSocketConnectionPingPongEvent;
     //fOnPong: TWebSocketConnectionPingPongEvent;
-
     fCookie: string;
-    fVersion: integer;
+    fVersion: Integer;
     fProtocol: string;
     fResourceName: string;
     fOrigin: string;
@@ -157,90 +135,63 @@ type
     fPort: string;
     fHost: string;
     fHeaders: TStringList;
-
-
-    fClosedByMe: boolean;
-    fClosedByPeer: boolean;
-    fMasking: boolean;
-    fRequireMasking: boolean;
-    fHandshake: boolean;
-
-
-    fCloseCode: integer;
+    fClosedByMe: Boolean;
+    fClosedByPeer: Boolean;
+    fMasking: Boolean;
+    fRequireMasking: Boolean;
+    fHandshake: Boolean;
+    fCloseCode: Integer;
     fCloseReason: string;
-    fClosingByPeer: boolean;
-
-
-    fReadFinal: boolean;
-    fReadRes1: boolean;
-    fReadRes2: boolean;
-    fReadRes3: boolean;
-    fReadCode: integer;
+    fClosingByPeer: Boolean;
+    fReadFinal: Boolean;
+    fReadRes1: Boolean;
+    fReadRes2: Boolean;
+    fReadRes3: Boolean;
+    fReadCode: Integer;
     fReadStream: TMemoryStream;
-
-    fWriteFinal: boolean;
-    fWriteRes1: boolean;
-    fWriteRes2: boolean;
-    fWriteRes3: boolean;
-    fWriteCode: integer;
+    fWriteFinal: Boolean;
+    fWriteRes1: Boolean;
+    fWriteRes2: Boolean;
+    fWriteRes3: Boolean;
+    fWriteCode: Integer;
     fWriteStream: TMemoryStream;
-
     fSendCriticalSection: TCriticalSection;
-
-    fFullDataProcess: boolean;
+    fFullDataProcess: Boolean;
     fFullDataStream: TMemoryStream;
-
-    function GetClosed: boolean;
-    function GetClosing: boolean;
-
-
-
-
+    function GetClosed: Boolean;
+    function GetClosing: Boolean;
     procedure ExecuteConnection; override;
-    function ReadData(var aFinal, aRes1, aRes2, aRes3: boolean; var aCode: integer; aData: TMemoryStream): integer; virtual;
-    function ValidConnection: boolean;
-
-
+    function ReadData(var aFinal, aRes1, aRes2, aRes3: Boolean; var aCode: Integer; aData: TMemoryStream): Integer; virtual;
+    function ValidConnection: Boolean;
     procedure DoSyncClose;
     procedure DoSyncOpen;
-    //procedure DoSyncPing;
-    //procedure DoSyncPong;
     procedure DoSyncRead;
     procedure DoSyncReadFull;
     procedure DoSyncWrite;
-
     procedure SyncClose;
     procedure SyncOpen;
-    //procedure SyncPing;
-    //procedure SyncPong;
     procedure SyncRead;
     procedure SyncReadFull;
     procedure SyncWrite;
-
     {:Overload this function to process connection close (not at socket level, but as an actual WebSocket frame)
       aCloseCode represents close code (see wsClose constants)
       aCloseReason represents textual information transfered with frame (there is no specified format or meaning)
       aClosedByPeer whether connection has been closed by this connection object or by peer endpoint
     }
-    procedure ProcessClose(aCloseCode: integer; aCloseReason: string; aClosedByPeer: boolean); virtual;
-
-
+    procedure ProcessClose(aCloseCode: Integer; aCloseReason: string; aClosedByPeer: Boolean); virtual;
     {:Overload this function to process data as soon as they are read before other Process<data> function is called
       this function should be used by extensions to modify incomming data before the are process based on code
     }
-    procedure ProcessData(var aFinal: boolean; var aRes1: boolean; var aRes2: boolean; var aRes3: boolean; var aCode: integer; aData: TMemoryStream); virtual;
-
-
+    procedure ProcessData(var aFinal: Boolean; var aRes1: Boolean; var aRes2: Boolean; var aRes3: Boolean;
+      var aCode: Integer; aData: TMemoryStream); virtual;
     {:Overload this function to process ping frame)
       aData represents textual information transfered with frame (there is no specified format or meaning)
     }
     procedure ProcessPing(aData: string); virtual;
-
     {:Overload this function to process pong frame)
       aData represents textual information transfered with frame (there is no specified format or meaning)
     }
     procedure ProcessPong(aData: string); virtual;
-
     {:Overload this function to process binary frame)
       aFinal whether frame is final frame or continuing
       aRes1 whether 1st extension bit is set up
@@ -250,10 +201,9 @@ type
 
       second version is for contuniation frames
     }
-    procedure ProcessStream(aFinal, aRes1, aRes2, aRes3: boolean; aData: TMemoryStream); virtual;
-    procedure ProcessStreamContinuation(aFinal, aRes1, aRes2, aRes3: boolean; aData: TMemoryStream); virtual;
+    procedure ProcessStream(aFinal, aRes1, aRes2, aRes3: Boolean; aData: TMemoryStream); virtual;
+    procedure ProcessStreamContinuation(aFinal, aRes1, aRes2, aRes3: Boolean; aData: TMemoryStream); virtual;
     procedure ProcessStreamFull(aData: TMemoryStream); virtual;
-
     {:Overload this function to process text frame)
       aFinal whether frame is final frame or continuing
       aRes1 whether 1st extension bit is set up
@@ -263,27 +213,19 @@ type
 
       second version is for contuniation frames
     }
-    procedure ProcessText(aFinal, aRes1, aRes2, aRes3: boolean; aData: string);  virtual;
-    procedure ProcessTextContinuation(aFinal, aRes1, aRes2, aRes3: boolean; aData: string);  virtual;
-    procedure ProcessTextFull(aData: string);  virtual;
-
-  published
-
+    procedure ProcessText(aFinal, aRes1, aRes2, aRes3: Boolean; aData: string); virtual;
+    procedure ProcessTextContinuation(aFinal, aRes1, aRes2, aRes3: Boolean; aData: string); virtual;
+    procedure ProcessTextFull(aData: string); virtual;
   public
     constructor Create(aSocket: TTCPCustomConnectionSocket); override;
     destructor Destroy; override;
-
-    {:
-      Whether connection is in active state (not closed, closing, socket, exists, i/o  threads not terminated..)
-    }
-    function CanReceiveOrSend: boolean;
-
+    {:Whether connection is in active state (not closed, closing, socket, exists, i/o  threads not terminated..)}
+    function CanReceiveOrSend: Boolean;
     {:Procedure to close connection
       aCloseCode represents close code (see wsClose constants)
       aCloseReason represents textual information transfered with frame (there is no specified format or meaning) the string can only be 123 bytes length
     }
-    procedure Close(aCode: integer; aCloseReason: string); virtual; abstract;
-
+    procedure Close(aCode: Integer; aCloseReason: string); virtual; abstract;
     {:Send binary frame
       aData data stream
       aFinal whether frame is final frame or continuing
@@ -291,8 +233,7 @@ type
       aRes2 2nd extension bit
       aRes3 3rd extension bit
     }
-    procedure SendBinary(aData: TStream; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-
+    procedure SendBinary(aData: TStream; aFinal: Boolean = True; aRes1: Boolean = False; aRes2: Boolean = False; aRes3: Boolean = False);
     {:Send binary continuation frame
       aData data stream
       aFinal whether frame is final frame or continuing
@@ -300,8 +241,8 @@ type
       aRes2 2nd extension bit
       aRes3 3rd extension bit
     }
-    procedure SendBinaryContinuation(aData: TStream; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-
+    procedure SendBinaryContinuation(aData: TStream; aFinal: Boolean = True; aRes1: Boolean = False;
+      aRes2: Boolean = False; aRes3: Boolean = False);
     {:Send generic frame
       aFinal whether frame is final frame or continuing
       aRes1 1st extension bit
@@ -310,10 +251,8 @@ type
       aCode frame code
       aData data stream or string
     }
-    function SendData(aFinal, aRes1, aRes2, aRes3: boolean; aCode: integer; aData: TStream): integer; overload; virtual;
-    function SendData(aFinal, aRes1, aRes2, aRes3: boolean; aCode: integer; aData: string): integer; overload; virtual;
-
-
+    function SendData(aFinal, aRes1, aRes2, aRes3: Boolean; aCode: Integer; aData: TStream): Integer; overload; virtual;
+    function SendData(aFinal, aRes1, aRes2, aRes3: Boolean; aCode: Integer; aData: string): Integer; overload; virtual;
     {:Send textual frame
       aData data string (MUST be UTF-8)
       aFinal whether frame is final frame or continuing
@@ -321,8 +260,8 @@ type
       aRes2 2nd extension bit
       aRes3 3rd extension bit
     }
-    procedure SendText(aData: string; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false); virtual;
-
+    procedure SendText(aData: string; aFinal: Boolean = True; aRes1: Boolean = False; aRes2: Boolean = False;
+      aRes3: Boolean = False); virtual;
     {:Send textual continuation frame
       aData data string (MUST be UTF-8)
       aFinal whether frame is final frame or continuing
@@ -330,44 +269,36 @@ type
       aRes2 2nd extension bit
       aRes3 3rd extension bit
     }
-    procedure SendTextContinuation(aData: string; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-
+    procedure SendTextContinuation(aData: string; aFinal: Boolean = True; aRes1: Boolean = False;
+      aRes2: Boolean = False; aRes3: Boolean = False);
     {:Send Ping
       aData ping informations
     }
     procedure Ping(aData: string);
-
     {:Send Pong
       aData pong informations
     }
     procedure Pong(aData: string);
-
     {:Temination procedure
       This method should be called instead of Terminate to terminate thread,
       it internally calls Terminate, but can be overloaded,
       and can be used for data clean up
     }
     procedure TerminateThread; override;
-
-
-
-    {: Whether connection has been closed
+    {:Whether connection has been closed
       (either socket has been closed or thread has been terminated or WebSocket has been closed by this and peer connection)
-     }
-    property Closed: boolean read GetClosed;
-
-    {: Whether WebSocket has been closed by this and peer connection }
-    property Closing: boolean read GetClosing;
-
-    {: WebSocket connection cookies
+    }
+    property Closed: Boolean read GetClosed;
+    {:Whether WebSocket has been closed by this and peer connection}
+    property Closing: Boolean read GetClosing;
+    {:WebSocket connection cookies
       Property is regular unparsed Cookie header string
       e.g. cookie1=value1;cookie2=value2
 
       empty string represents that no cookies are present
     }
     property Cookie: string read fCookie;
-
-    {: WebSocket connection extensions
+    {:WebSocket connection extensions
       Property is regular unparsed Sec-WebSocket-Extensions header string
       e.g. foo, bar; baz=2
 
@@ -378,32 +309,24 @@ type
       it is the default value
     }
     property Extension: string read fExtension;
-
     {:Whether to register for full data processing
-    (callink @link(ProcessFullText), @link(ProcessFullStream) @link(OnFullRead)
-    those methods/events are called if FullDataProcess is @true and whole message is read (after final frame)
+      (callink @link(ProcessFullText), @link(ProcessFullStream) @link(OnFullRead)
+      those methods/events are called if FullDataProcess is @true and whole message is read (after final frame)
     }
-    property FullDataProcess: boolean read fFullDataProcess write fFullDataProcess;
-
-
-    {:
-      Whether WebSocket handshake was succecfull (and connection is afer WS handshake) 
-    }
-    property Handshake: boolean read fHandshake;
-
-    {: WebSocket connection host
+    property FullDataProcess: Boolean read fFullDataProcess write fFullDataProcess;
+    {:Whether WebSocket handshake was succecfull (and connection is afer WS handshake)}
+    property Handshake: Boolean read fHandshake;
+    {:WebSocket connection host
       Property is regular unparsed Host header string
       e.g. server.example.com
     }
     property Host: string read fHost;
-
-    {: WebSocket connection origin
+    {:WebSocket connection origin
       Property is regular unparsed Sec-WebSocket-Origin header string
       e.g. http://example.com
     }
     property Origin: string read fOrigin;
-
-    {: WebSocket connection protocol
+    {:WebSocket connection protocol
       Property is regular unparsed Sec-WebSocket-Protocol header string
       e.g. chat, superchat
 
@@ -414,69 +337,57 @@ type
       it is the default value
     }
     property Protocol: string read fProtocol;
-
-    {: Connection port }
+    {:Connection port}
     property Port: string read fPort;
-    
-    {: Connection resource
+    {:Connection resource
       e.g. /path1/path2/path3/file.ext
     }
     property ResourceName: string read fResourceName;
-
-    {: WebSocket version (either 7 or 8 or 13)}
-    property Version: integer read fVersion;
-
-    {: WebSocket Close frame event }
+    {:WebSocket version (either 7 or 8 or 13)}
+    property Version: Integer read fVersion;
+    {:WebSocket Close frame event}
     property OnClose: TWebSocketConnectionClose read fOnClose write fOnClose;
-
-    {: WebSocket connection successfully }
+    {:WebSocket connection successfully}
     property OnOpen: TWebSocketConnectionEvent read fOnOpen write fOnOpen;
-
-    { : WebSocket ping
+    {:WebSocket ping
     property OnPing: TWebSocketConnectionPingPongEvent read fOnPing write fOnPing;
     }
-
-    { : WebSocket pong
+    {:WebSocket pong
     property OnPong: TWebSocketConnectionPingPongEvent read fOnPong write fOnPong;
     }
-
-    {: WebSocket frame read }
+    {:WebSocket frame read}
     property OnRead: TWebSocketConnectionData read fOnRead write fOnRead;
-
-    {: WebSocket read full data}
+    {:WebSocket read full data}
     property OnReadFull: TWebSocketConnectionDataFull read fOnReadFull write fOnReadFull;
-
-    {: WebSocket frame written }
+    {:WebSocket frame written}
     property OnWrite: TWebSocketConnectionData read fOnWrite write fOnWrite;
   end;
 
-  {: Class of WebSocket connections }
+  {:Class of WebSocket connections}
   TWebSocketCustomConnections = class of TWebSocketCustomConnection;
 
-  {: WebSocket server connection automatically created by server on incoming connection }
+  {:WebSocket server connection automatically created by server on incoming connection}
   TWebSocketServerConnection = class(TWebSocketCustomConnection)
   public
     constructor Create(aSocket: TTCPCustomConnectionSocket); override;
-    procedure Close(aCode: integer; aCloseReason: string); override;
+    procedure Close(aCode: Integer; aCloseReason: string); override;
     procedure TerminateThread; override;
-
-    {: List of all headers
+    {:List of all headers
       keys are lowercased header name
       e.g host, connection, sec-websocket-key
     }
     property Header: TStringList read fHeaders;
-
   end;
 
-  {: Class of WebSocket server connections }
+  {:Class of WebSocket server connections }
   TWebSocketServerConnections = class of TWebSocketServerConnection;
 
-  {: WebSocket client connection, this object shoud be created to establish client to server connection  }
+  {:WebSocket client connection, this object shoud be created to establish client to server connection}
   TWebSocketClientConnection = class(TWebSocketCustomConnection)
   protected
-    function BeforeExecuteConnection: boolean; override;
+    function BeforeExecuteConnection: Boolean; override;
   public
-    {: construstor to create connection,
+    {:construstor to create connection,
       parameters has the same meaning as corresponging connection properties (see 2 differences below) and
       should be formated according to headers values
 
@@ -486,14 +397,11 @@ type
 
       Version must be >= 8
     }
-    constructor Create(aHost, aPort, aResourceName: string;
-    aOrigin: string = '-'; aProtocol: string = '-'; aExtension: string = '-';
-    aCookie: string = '-'; aVersion: integer = 13); reintroduce; virtual;
-
-    procedure Close(aCode: integer; aCloseReason: string); override;
+    constructor Create(aHost, aPort, aResourceName: string; aOrigin: string = '-'; aProtocol: string = '-';
+      aExtension: string = '-'; aCookie: string = '-'; aVersion: Integer = 13); reintroduce; virtual;
+    procedure Close(aCode: Integer; aCloseReason: string); override;
     procedure Execute; override;
   end;
-
 
   TWebSocketServer = class;
 
@@ -512,15 +420,8 @@ type
     result (using the HTTP code meaning) and connection will be closed, if event is not implemented
     101 is used as a default value 
   }
-  TWebSocketServerReceiveConnection = procedure (
-    Server: TWebSocketServer; Socket: TTCPCustomConnectionSocket;
-    Header: TStringList;
-    ResourceName, Host, Port, Origin, Cookie: string;
-    HttpResult: integer;
-    Protocol, Extensions: string
-  ) of object;
-
-
+  TWebSocketServerReceiveConnection = procedure(Server: TWebSocketServer; Socket: TTCPCustomConnectionSocket;
+    Header: TStringList; ResourceName, Host, Port, Origin, Cookie: string; HttpResult: Integer; Protocol, Extensions: string) of object;
 
   TWebSocketServer = class(TCustomServer)
   protected
@@ -534,14 +435,12 @@ type
     fncExtensions: string;
     fncCookie: string;
     fncHeaders: string;
-    fncResultHttp: integer;
-
-    fOnReceiveConnection: TWebSocketServerReceiveConnection;  protected
+    fncResultHttp: Integer;
+    fOnReceiveConnection: TWebSocketServerReceiveConnection;
     function CreateServerConnection(aSocket: TTCPCustomConnectionSocket): TCustomConnection; override;
     procedure DoSyncReceiveConnection;
     procedure SyncReceiveConnection;
     property Terminated;
-
     {:This function defines what kind of TWebSocketServerConnection implementation should be used as
       a connection object.
       The servers default return value is TWebSocketServerConnection.
@@ -559,298 +458,262 @@ type
       accepted, the value MUST BE 101, any other value meand that the client will be informed about the
       result (using the HTTP code meaning) and connection will be closed, if event is not implemented
       101 is used as a default value
-
     }
-    function GetWebSocketConnectionClass(
-      Socket: TTCPCustomConnectionSocket;
-      Header: TStringList;
-      ResourceName, Host, Port, Origin, Cookie: string;
-      out HttpResult: integer;
-      var Protocol, Extensions: string
-    ): TWebSocketServerConnections; virtual;
-
+    function GetWebSocketConnectionClass(Socket: TTCPCustomConnectionSocket; Header: TStringList;
+      ResourceName, Host, Port, Origin, Cookie: string; out HttpResult: Integer;
+      var Protocol, Extensions: string): TWebSocketServerConnections; virtual;
   public
-    {: WebSocket connection received }
+    {:WebSocket connection received}
     property OnReceiveConnection: TWebSocketServerReceiveConnection read fOnReceiveConnection write fOnReceiveConnection;
-
-    {: close all connections
+    {:close all connections
     for parameters see connection Close method
     }
-    procedure CloseAllConnections(aCloseCode: integer; aReason: string);
-
-
+    procedure CloseAllConnections(aCloseCode: Integer; aReason: string);
     {:Temination procedure
       This method should be called instead of Terminate to terminate thread,
       it internally calls Terminate, but can be overloaded,
       and can be used for data clean up
     }
     procedure TerminateThread; override;
-
-    {: Method to send binary data to all connected clients
+    {:Method to send binary data to all connected clients
       see @link(TWebSocketServerConnection.SendBinary) for parameters description
     }
-    procedure BroadcastBinary(aData: TStream; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-
-    {: Method to send text data to all connected clients
+    procedure BroadcastBinary(aData: TStream; aFinal: Boolean = True; aRes1: Boolean = False; aRes2: Boolean = False;
+      aRes3: Boolean = False);
+    {:Method to send text data to all connected clients
       see @link(TWebSocketServerConnection.SendText) for parameters description
     }
-    procedure BroadcastText(aData: string; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-
+    procedure BroadcastText(aData: string; aFinal: Boolean = True; aRes1: Boolean = False; aRes2: Boolean = False; aRes3: Boolean = False);
   end;
 
 implementation
-uses Math, synautil, synacode, synsock {$IFDEF Win32}, Windows{$ENDIF Win32},
-  BClasses, synachar;
 
+uses
+  Math, synautil, synacode, synsock, {$IFDEF WIN32}Windows,{$ENDIF} BClasses, synachar;
 
+{$IFDEF WIN32}{$O-}{$ENDIF}
 
-{$IFDEF Win32} {$O-} {$ENDIF Win32}
-
-
-function httpCode(code: integer): string;
+function httpCode(code: Integer): string;
 begin
-  case (code) of
-     100: result := 'Continue'; 
-     101: result := 'Switching Protocols'; 
-     200: result := 'OK'; 
-     201: result := 'Created'; 
-     202: result := 'Accepted'; 
-     203: result := 'Non-Authoritative Information'; 
-     204: result := 'No Content'; 
-     205: result := 'Reset Content';
-     206: result := 'Partial Content'; 
-     300: result := 'Multiple Choices'; 
-     301: result := 'Moved Permanently'; 
-     302: result := 'Found'; 
-     303: result := 'See Other'; 
-     304: result := 'Not Modified'; 
-     305: result := 'Use Proxy'; 
-     307: result := 'Temporary Redirect'; 
-     400: result := 'Bad Request'; 
-     401: result := 'Unauthorized'; 
-     402: result := 'Payment Required'; 
-     403: result := 'Forbidden'; 
-     404: result := 'Not Found'; 
-     405: result := 'Method Not Allowed'; 
-     406: result := 'Not Acceptable'; 
-     407: result := 'Proxy Authentication Required'; 
-     408: result := 'Request Time-out'; 
-     409: result := 'Conflict'; 
-     410: result := 'Gone'; 
-     411: result := 'Length Required'; 
-     412: result := 'Precondition Failed'; 
-     413: result := 'Request Entity Too Large';
-     414: result := 'Request-URI Too Large'; 
-     415: result := 'Unsupported Media Type'; 
-     416: result := 'Requested range not satisfiable'; 
-     417: result := 'Expectation Failed'; 
-     500: result := 'Internal Server Error'; 
-     501: result := 'Not Implemented'; 
-     502: result := 'Bad Gateway'; 
-     503: result := 'Service Unavailable';
-     504: result := 'Gateway Time-out';
-     else result := 'unknown code: $code';
+  case code of
+    100: Result := 'Continue';
+    101: Result := 'Switching Protocols';
+    200: Result := 'OK';
+    201: Result := 'Created';
+    202: Result := 'Accepted';
+    203: Result := 'Non-Authoritative Information';
+    204: Result := 'No Content';
+    205: Result := 'Reset Content';
+    206: Result := 'Partial Content';
+    300: Result := 'Multiple Choices';
+    301: Result := 'Moved Permanently';
+    302: Result := 'Found';
+    303: Result := 'See Other';
+    304: Result := 'Not Modified';
+    305: Result := 'Use Proxy';
+    307: Result := 'Temporary Redirect';
+    400: Result := 'Bad Request';
+    401: Result := 'Unauthorized';
+    402: Result := 'Payment Required';
+    403: Result := 'Forbidden';
+    404: Result := 'Not Found';
+    405: Result := 'Method Not Allowed';
+    406: Result := 'Not Acceptable';
+    407: Result := 'Proxy Authentication Required';
+    408: Result := 'Request Time-out';
+    409: Result := 'Conflict';
+    410: Result := 'Gone';
+    411: Result := 'Length Required';
+    412: Result := 'Precondition Failed';
+    413: Result := 'Request Entity Too Large';
+    414: Result := 'Request-URI Too Large';
+    415: Result := 'Unsupported Media Type';
+    416: Result := 'Requested range not satisfiable';
+    417: Result := 'Expectation Failed';
+    500: Result := 'Internal Server Error';
+    501: Result := 'Not Implemented';
+    502: Result := 'Bad Gateway';
+    503: Result := 'Service Unavailable';
+    504: Result := 'Gateway Time-out';
+    else
+      Result := 'unknown code: ' + IntToStr(code);
   end;
 end;
 
-
-function ReadHttpHeaders(aSocket: TTCPCustomConnectionSocket; var aGet: string; aHeaders: TStrings): boolean;
-var s, name: string;
+function ReadHttpHeaders(aSocket: TTCPCustomConnectionSocket; var aGet: string; aHeaders: TStrings): Boolean;
+var
+  s, Name: string;
 begin
   aGet := '';
   aHeaders.Clear;
-  result := true;
+  Result := True;
   repeat
     aSocket.MaxLineLength := 1024 * 1024; // not to attack memory on server
     s := aSocket.RecvString(30 * 1000); // not to hang up connection
-    if (aSocket.LastError <> 0) then
+    if aSocket.LastError <> 0 then
     begin
-      result := false;
-      break;
+      Result := False;
+      Break;
     end;
-    if (s = '') then
-      break;
-    if (aGet = '') then
+    if s = '' then
+      Break;
+    if aGet = '' then
       aGet := s
     else
     begin
-      name := LowerCase(trim(SeparateLeft(s, ':')));
-      if (aHeaders.Values[name] = '') then
-        aHeaders.Values[name] := trim(SeparateRight(s, ':'))
+      Name := LowerCase(Trim(SeparateLeft(s, ':')));
+      if aHeaders.Values[Name] = '' then
+        aHeaders.Values[Name] := Trim(SeparateRight(s, ':'))
       else
-        aHeaders.Values[name] := aHeaders.Values[name] + ',' + trim(SeparateRight(s, ':'));
+        aHeaders.Values[Name] := aHeaders.Values[Name] + ',' + Trim(SeparateRight(s, ':'));
     end;
-  until {IsTerminated} false;
+  until {IsTerminated} False;
   aSocket.MaxLineLength := 0;
 end;
 
 procedure ODS(aStr: string); overload;
 begin
-  {$IFDEF Win32}
-  OutputDebugString(pChar(FormatDateTime('yyyy-mm-dd hh:nn:ss', now) + ': ' + aStr));
-  {$ENDIF Win32}
+  {$IFDEF WIN32}
+  OutputDebugString(PChar(FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + ': ' + aStr));
+  {$ENDIF}
 end;
 
 procedure ODS(aStr: string; aData: array of const); overload;
 begin
-  {$IFDEF Win32}
+  {$IFDEF WIN32}
   ODS(Format(aStr, aData));
-  {$ENDIF Win32}
+  {$ENDIF}
 end;
 
 { TWebSocketServer }
 
-procedure TWebSocketServer.BroadcastBinary(aData: TStream; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-var i: integer;
+procedure TWebSocketServer.BroadcastBinary(aData: TStream; aFinal: Boolean = True; aRes1: Boolean = False;
+  aRes2: Boolean = False; aRes3: Boolean = False);
+var
+  i: Integer;
 begin
   LockTermination;
   for i := 0 to fConnections.Count - 1 do
-  begin
-    if (not TWebSocketServerConnection(fConnections[i]).IsTerminated) then
-      TWebSocketServerConnection(fConnections[i]).SendBinary(aData, aFinal, aRes1, aRes2,  aRes3);
-  end;
+    if not TWebSocketServerConnection(fConnections[i]).IsTerminated then
+      TWebSocketServerConnection(fConnections[i]).SendBinary(aData, aFinal, aRes1, aRes2, aRes3);
   UnLockTermination;
 end;
 
-procedure TWebSocketServer.BroadcastText(aData: string; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
-var i: integer;
+procedure TWebSocketServer.BroadcastText(aData: string; aFinal: Boolean = True; aRes1: Boolean = False;
+  aRes2: Boolean = False; aRes3: Boolean = False);
+var
+  i: Integer;
 begin
   LockTermination;
   for i := 0 to fConnections.Count - 1 do
-  begin
-    if (not TWebSocketServerConnection(fConnections[i]).IsTerminated) then
-      TWebSocketServerConnection(fConnections[i]).SendText(aData, aFinal, aRes1, aRes2,  aRes3);
-  end;
+    if not TWebSocketServerConnection(fConnections[i]).IsTerminated then
+      TWebSocketServerConnection(fConnections[i]).SendText(aData, aFinal, aRes1, aRes2, aRes3);
   UnLockTermination;
 end;
 
-procedure TWebSocketServer.CloseAllConnections(aCloseCode: integer; aReason: string);
-var i: integer;
+procedure TWebSocketServer.CloseAllConnections(aCloseCode: Integer; aReason: string);
+var
+  i: Integer;
 begin
   LockTermination;
-  //for i := 0 to fConnections.Count - 1 do
   for i := fConnections.Count - 1 downto 0 do
-  begin
-    if (not TWebSocketServerConnection(fConnections[i]).IsTerminated) then
-      TWebSocketServerConnection(fConnections[i]).Close(aCloseCode, aReason);// SendBinary(aData, aFinal, aRes1, aRes2,  aRes3);
-  end;
+    if not TWebSocketServerConnection(fConnections[i]).IsTerminated then
+      TWebSocketServerConnection(fConnections[i]).Close(aCloseCode, aReason); // SendBinary(aData, aFinal, aRes1, aRes2, aRes3);
   UnLockTermination;
-
 end;
 
 function TWebSocketServer.CreateServerConnection(aSocket: TTCPCustomConnectionSocket): TCustomConnection;
-var headers, hrs: TStringList;
-    get: string;
-    s{, resName, host, port}, key, version{, origin, protocol, extensions, cookie}, tmpExtension, tmpWord, extensionKey, extensionValue: string;
-    iversion, vv, extCounter: integer;
-    res: boolean;
-    r : TWebSocketServerConnections;
+var
+  headers, hrs: TStringList;
+  get: string;
+  s, key, version, tmpExtension, tmpWord, extensionKey, extensionValue: string;
+  iversion, vv, extCounter: Integer;
+  res: Boolean;
+  r: TWebSocketServerConnections;
 begin
   fncSocket := aSocket;
-  result := inherited CreateServerConnection(aSocket);
+  Result := inherited CreateServerConnection(aSocket);
   headers := TStringList.Create;
   try
     res := ReadHttpHeaders(aSocket, get, headers);
-    if (res) then
+    if res then
     begin
-      res := false;
+      res := False;
       try
-        //CHECK HTTP GET
-        if ((Pos('GET ', Uppercase(get)) <> 0) and (Pos(' HTTP/1.1', Uppercase(get)) <> 0)) then
+        // CHECK HTTP GET
+        if (Pos('GET ', UpperCase(get)) <> 0) and (Pos(' HTTP/1.1', UpperCase(get)) <> 0) then
         begin
           fncResourceName := SeparateRight(get, ' ');
           fncResourceName := SeparateLeft(fncResourceName, ' ');
         end
-        else exit;
-        fncResourceName := trim(fncResourceName);
+        else
+          Exit;
 
-  {
-      : string;
-      : string;
-      : string;
-      : string;
-      : string;
-      : string;
-      : string;
-      fncHeaders: string;
-  }
+        fncResourceName := Trim(fncResourceName);
 
-        //CHECK HOST AND PORT
+        // CHECK HOST AND PORT
         s := headers.Values['host'];
-        if (s <> '') then
+        if s <> '' then
         begin
-          fncHost := trim(s);
+          fncHost := Trim(s);
           fncPort := SeparateRight(fncHost, ':');
           fncHost := SeparateLeft(fncHost, ':');
         end;
-        fncHost := trim(fncHost);
-        fncPort := trim(fncPort);
+        fncHost := Trim(fncHost);
+        fncPort := Trim(fncPort);
 
-        if (fncHost = '') then exit;
-        //if (fncPort <> '') and (fncPort <> self.port) then exit;
+        if fncHost = '' then
+          Exit;
 
-        {
-        if  (self.host <> '0.0.0.0') and (self.Host <> '127.0.0.1') and
-            (self.host <> 'localhost') and (fncHost <> self.host) then exit;
-        }    
-
-        //WEBSOCKET KEY
+        // WEBSOCKET KEY
         s := headers.Values['sec-websocket-key'];
-        if (s <> '') then
-        begin
-          if (Length(DecodeBase64(s)) = 16) then
-          begin
+        if s <> '' then
+          if Length(DecodeBase64(s)) = 16 then
             key := s;
-          end;
+        if key = '' then
+          Exit;
+        key := Trim(key);
 
-        end;
-        if (key = '') then exit;
-        key := trim(key);
-
-        //WEBSOCKET VERSION
+        // WEBSOCKET VERSION
         s := headers.Values['sec-websocket-version'];
-        if (s <> '') then
+        if s <> '' then
         begin
           vv := StrToIntDef(s, -1);
-
-          if ((vv >= 7) and (vv <= 13)) then
-          begin
+          if (vv >= 7) and (vv <= 13) then
             version := s;
-          end;
         end;
-        if (version = '') then exit;
-        version := trim(version);
+        if version = '' then
+          Exit;
+        version := Trim(version);
         iversion := StrToIntDef(version, 13);
 
-        if (LowerCase(headers.Values['upgrade']) <> LowerCase('websocket')) or (pos('upgrade', LowerCase(headers.Values['connection'])) = 0) then
-          exit;
+        if (LowerCase(headers.Values['upgrade']) <> LowerCase('websocket')) or
+          (Pos('upgrade', LowerCase(headers.Values['connection'])) = 0) then
+          Exit;
 
-        //COOKIES
-
-
+        // COOKIES
         fncProtocol := '-';
         tmpExtension := '-';
         fncCookie := '-';
         fncOrigin := '-';
 
-        if (iversion < 13) then
+        if iversion < 13 then
         begin
-          if (headers.IndexOfName('sec-websocket-origin') > -1) then
-            fncOrigin := trim(headers.Values['sec-websocket-origin']);
+          if headers.IndexOfName('sec-websocket-origin') > -1 then
+            fncOrigin := Trim(headers.Values['sec-websocket-origin']);
         end
-        else begin
-          if (headers.IndexOfName('origin') > -1) then
-            fncOrigin := trim(headers.Values['origin']);
-        end;
+        else
+        if headers.IndexOfName('origin') > -1 then
+          fncOrigin := Trim(headers.Values['origin']);
 
-        if (headers.IndexOfName('sec-websocket-protocol') > -1) then
-          fncProtocol := trim(headers.Values['sec-websocket-protocol']);
-        if (headers.IndexOfName('sec-websocket-extensions') > -1) then
-          tmpExtension := trim(headers.Values['sec-websocket-extensions']);
-        if (headers.IndexOfName('cookie') > -1) then
-          fncCookie := trim(headers.Values['cookie']);
+        if headers.IndexOfName('sec-websocket-protocol') > -1 then
+          fncProtocol := Trim(headers.Values['sec-websocket-protocol']);
+        if headers.IndexOfName('sec-websocket-extensions') > -1 then
+          tmpExtension := Trim(headers.Values['sec-websocket-extensions']);
+        if headers.IndexOfName('cookie') > -1 then
+          fncCookie := Trim(headers.Values['cookie']);
 
-        fncHeaders := trim(headers.text);
+        fncHeaders := Trim(headers.Text);
 
         {
         ODS(get);
@@ -864,86 +727,79 @@ begin
         ODS('Protocol: %s', [fncProtocol]);
         ODS('Extensions: %s', [fncExtensions]);
         ODS('Cookie: %s', [fncCookie]);
-        {}
+        }
 
         // Account for client_max_window_bits, probably add more later on
-        for extCounter := 1 to WordCount(tmpExtension, [';']) do begin
-            tmpWord := ExtractWord(extCounter, tmpExtension, [' ', ';']);
+        for extCounter := 1 to WordCount(tmpExtension, [';']) do
+        begin
+          tmpWord := ExtractWord(extCounter, tmpExtension, [' ', ';']);
 
-            extensionKey := ExtractWord(1, tmpWord, ['=']);
-            extensionValue := ExtractWord(2, tmpWord, ['=']);
+          extensionKey := ExtractWord(1, tmpWord, ['=']);
+          extensionValue := ExtractWord(2, tmpWord, ['=']);
 
-            if Not IsWordPresent(extensionKey, fncExtensions, [' ', ';', '=']) then begin
-              fncExtensions := fncExtensions + extensionKey;
+          if not IsWordPresent(extensionKey, fncExtensions, [' ', ';', '=']) then
+          begin
+            fncExtensions := fncExtensions + extensionKey;
 
-              if (extensionKey = 'client_max_window_bits') and (length(extensionValue) = 0) then
-                fncExtensions := fncExtensions + '=15;'
-              else begin
-                if length(extensionValue) > 0 then
-                  fncExtensions := fncExtensions + '=' + extensionValue + ';'
-                else
-                  fncExtensions := fncExtensions + ';'
-              end;
-            end;
+            if (extensionKey = 'client_max_window_bits') and (Length(extensionValue) = 0) then
+              fncExtensions := fncExtensions + '=15;'
+            else
+            if Length(extensionValue) > 0 then
+              fncExtensions := fncExtensions + '=' + extensionValue + ';'
+            else
+              fncExtensions := fncExtensions + ';';
+          end;
         end;
 
-        if fncExtensions[length(fncExtensions)] = ';' then
+        if fncExtensions[Length(fncExtensions)] = ';' then
           Delete(fncExtensions, Length(fncExtensions), 1);
 
-        res := true;
+        res := True;
+
       finally
-        if (res) then
+        if res then
         begin
           fncResultHttp := 101;
           hrs := TStringList.Create;
           hrs.Assign(headers);
-          r := GetWebSocketConnectionClass(
-            fncSocket,
-            hrs,
-            fncResourceName, fncHost, fncPort, fncOrigin, fncCookie,
-            fncResultHttp, fncProtocol,  fncExtensions
-          );
-          if (assigned(r)) then
+          r := GetWebSocketConnectionClass(fncSocket, hrs, fncResourceName, fncHost, fncPort, fncOrigin,
+            fncCookie, fncResultHttp, fncProtocol, fncExtensions);
+          if Assigned(r) then
           begin
             DoSyncReceiveConnection;
-            if (fncResultHttp <> 101) then //HTTP ERROR FALLBACK
+            if fncResultHttp <> 101 then // HTTP ERROR FALLBACK
             begin
-              aSocket.SendString(Format('HTTP/1.1 %d %s'+#13#10, [fncResultHttp, httpCode(fncResultHttp)]));
-              aSocket.SendString(Format('%d %s'+#13#10#13#10, [fncResultHttp, httpCode(fncResultHttp)]));
+              aSocket.SendString(Format('HTTP/1.1 %d %s' + #13#10, [fncResultHttp, httpCode(fncResultHttp)]));
+              aSocket.SendString(Format('%d %s' + #13#10#13#10, [fncResultHttp, httpCode(fncResultHttp)]));
             end
             else
             begin
-
               key := EncodeBase64(SHA1(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
 
-              s :=        'HTTP/1.1 101 Switching Protocols' + #13#10;
-              s := s +    'Upgrade: websocket' + #13#10;
-              s := s +    'Connection: Upgrade' + #13#10;
-              s := s +    'Sec-WebSocket-Accept: ' + key + #13#10;
-              if (fncProtocol <> '-') then
-              begin
-                s := s +  'Sec-WebSocket-Protocol: ' + fncProtocol + #13#10;
-              end;
-              if (fncExtensions <> '-') then
-              begin
-                s := s +  'Sec-WebSocket-Extensions: ' + fncExtensions + #13#10;
-              end;
+              s := 'HTTP/1.1 101 Switching Protocols' + #13#10;
+              s := s + 'Upgrade: websocket' + #13#10;
+              s := s + 'Connection: Upgrade' + #13#10;
+              s := s + 'Sec-WebSocket-Accept: ' + key + #13#10;
+              if fncProtocol <> '-' then
+                s := s + 'Sec-WebSocket-Protocol: ' + fncProtocol + #13#10;
+              if fncExtensions <> '-' then
+                s := s + 'Sec-WebSocket-Extensions: ' + fncExtensions + #13#10;
               s := s + #13#10;
 
               aSocket.SendString(s);
-              if (aSocket.LastError = 0) then
+              if aSocket.LastError = 0 then
               begin
-                result := r.Create(aSocket);
-                TWebSocketCustomConnection(result).fCookie := fncCookie;
-                TWebSocketCustomConnection(result).fVersion := StrToInt(version);
-                TWebSocketCustomConnection(result).fProtocol := fncProtocol;
-                TWebSocketCustomConnection(result).fResourceName := fncResourceName;
-                TWebSocketCustomConnection(result).fOrigin := fncOrigin;
-                TWebSocketCustomConnection(result).fExtension := fncExtensions;
-                TWebSocketCustomConnection(result).fPort := fncPort;
-                TWebSocketCustomConnection(result).fHost := fncHost;
-                TWebSocketCustomConnection(result).fHeaders.Assign(headers);
-                TWebSocketCustomConnection(result).fHandshake := true;
+                Result := r.Create(aSocket);
+                TWebSocketCustomConnection(Result).fCookie := fncCookie;
+                TWebSocketCustomConnection(Result).fVersion := StrToInt(version);
+                TWebSocketCustomConnection(Result).fProtocol := fncProtocol;
+                TWebSocketCustomConnection(Result).fResourceName := fncResourceName;
+                TWebSocketCustomConnection(Result).fOrigin := fncOrigin;
+                TWebSocketCustomConnection(Result).fExtension := fncExtensions;
+                TWebSocketCustomConnection(Result).fPort := fncPort;
+                TWebSocketCustomConnection(Result).fHost := fncHost;
+                TWebSocketCustomConnection(Result).fHeaders.Assign(headers);
+                TWebSocketCustomConnection(Result).fHandshake := True;
               end;
             end;
           end;
@@ -958,51 +814,45 @@ end;
 
 procedure TWebSocketServer.DoSyncReceiveConnection;
 begin
-  if (assigned(fOnReceiveConnection)) then
-    Synchronize(SyncReceiveConnection)
+  if Assigned(fOnReceiveConnection) then
+    Synchronize(SyncReceiveConnection);
 end;
 
-function TWebSocketServer.GetWebSocketConnectionClass(      Socket: TTCPCustomConnectionSocket;
-      Header: TStringList;
-      ResourceName, Host, Port, Origin, Cookie: string;
-      out HttpResult: integer;
-      var Protocol, Extensions: string
-): TWebSocketServerConnections;
+function TWebSocketServer.GetWebSocketConnectionClass(Socket: TTCPCustomConnectionSocket; Header: TStringList;
+  ResourceName, Host, Port, Origin, Cookie: string; out HttpResult: Integer;
+  var Protocol, Extensions: string): TWebSocketServerConnections;
 begin
-  result := TWebSocketServerConnection;
+  Result := TWebSocketServerConnection;
 end;
 
 procedure TWebSocketServer.SyncReceiveConnection;
-var h: TStringList;
+var
+  h: TStringList;
 begin
-  if (assigned(fOnReceiveConnection)) then
+  if Assigned(fOnReceiveConnection) then
   begin
     h := TStringList.Create;
     h.Text := fncHeaders;
-    fOnReceiveConnection(
-      self, fncSocket,
-      h,
-      fncResourceName, fncHost, fncPort, fncOrigin, fncCookie,
-      fncResultHttp, fncProtocol,  fncExtensions
-    );
+    fOnReceiveConnection(Self, fncSocket, h, fncResourceName, fncHost, fncPort, fncOrigin, fncCookie, fncResultHttp,
+      fncProtocol, fncExtensions);
     h.Free;
   end;
 end;
 
 procedure TWebSocketServer.TerminateThread;
 begin
-  if (terminated) then exit;
-  fOnReceiveConnection := nil;  
+  if Terminated then
+    Exit;
+  fOnReceiveConnection := nil;
   inherited;
 end;
 
 { TWebSocketCustomConnection }
 
-function TWebSocketCustomConnection.CanReceiveOrSend: boolean;
+function TWebSocketCustomConnection.CanReceiveOrSend: Boolean;
 begin
-  result := ValidConnection and not (fClosedByMe or fClosedByPeer) and fHandshake;
+  Result := ValidConnection and not (fClosedByMe or fClosedByPeer) and fHandshake;
 end;
-
 
 constructor TWebSocketCustomConnection.Create(aSocket: TTCPCustomConnectionSocket);
 begin
@@ -1015,35 +865,28 @@ begin
   fExtension := '-';
   fPort := '';
   fHost := '';
-  fClosedByMe := false;
-  fClosedByPeer := false;
-  fMasking := false;
-  fClosingByPeer := false;
-  fRequireMasking := false;
-
-
-  fReadFinal := false;
-  fReadRes1 := false;
-  fReadRes2 := false;
-  fReadRes3 := false;
+  fClosedByMe := False;
+  fClosedByPeer := False;
+  fMasking := False;
+  fClosingByPeer := False;
+  fRequireMasking := False;
+  fReadFinal := False;
+  fReadRes1 := False;
+  fReadRes2 := False;
+  fReadRes3 := False;
   fReadCode := 0;
   fReadStream := TMemoryStream.Create;
-
-  fWriteFinal := false;
-  fWriteRes1 := false;
-  fWriteRes2 := false;
-  fWriteRes3 := false;
+  fWriteFinal := False;
+  fWriteRes1 := False;
+  fWriteRes2 := False;
+  fWriteRes3 := False;
   fWriteCode := 0;
   fWriteStream := TMemoryStream.Create;
-
-  fFullDataProcess := false;
+  fFullDataProcess := False;
   fFullDataStream := TMemoryStream.Create;
-
   fSendCriticalSection := TCriticalSection.Create;
-  fHandshake := false;
-
+  fHandshake := False;
   inherited;
-
 end;
 
 destructor TWebSocketCustomConnection.Destroy;
@@ -1058,77 +901,60 @@ end;
 
 procedure TWebSocketCustomConnection.DoSyncClose;
 begin
-  if (assigned(fOnClose)) then
+  if Assigned(fOnClose) then
     Synchronize(SyncClose);
-
 end;
-
-
 
 procedure TWebSocketCustomConnection.DoSyncOpen;
 begin
-  if (assigned(fOnOpen)) then
+  if Assigned(fOnOpen) then
     Synchronize(SyncOpen);
 end;
-{
-procedure TWebSocketCustomConnection.DoSyncPing;
-begin
 
-end;
-
-procedure TWebSocketCustomConnection.DoSyncPong;
-begin
-
-end;
-}
 procedure TWebSocketCustomConnection.DoSyncRead;
 begin
   fReadStream.Position := 0;
-  if (assigned(fOnRead)) then
+  if Assigned(fOnRead) then
     Synchronize(SyncRead);
-
 end;
 
 procedure TWebSocketCustomConnection.DoSyncReadFull;
 begin
   fFullDataStream.Position := 0;
-  if (assigned(fOnReadFull)) then
+  if Assigned(fOnReadFull) then
     Synchronize(SyncReadFull);
 end;
 
 procedure TWebSocketCustomConnection.DoSyncWrite;
 begin
-  if (assigned(fOnWrite)) then
+  if Assigned(fOnWrite) then
     Synchronize(SyncWrite);
 end;
 
 procedure TWebSocketCustomConnection.ExecuteConnection;
 var
-    result: integer;
-    //Data: string;
-    closeCode: integer;
-    closeResult: string;
-    s: string;
-    lastDataCode, lastDataCode2: integer;
-    //Data: TStringStream;
+  result: Integer;
+  //Data: String;
+  closeCode: Integer;
+  closeResult: string;
+  s: string;
+  lastDataCode, lastDataCode2: Integer;
+  //Data: TStringStream;
 begin
   DoSyncOpen;
   try
-    //while(not IsTerminated) or fClosed do
     lastDataCode := -1;
     lastDataCode2 := -1;
     while CanReceiveOrSend do
     begin
-      //OutputDebugString(pChar(Format('execute %d', [fIndex])));
-      result := ReadData(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
-      if (CanReceiveOrSend)  then
-      begin
-        if (result = 0) then // no socket error occured
+      //ODS(Format('execute %d', [fIndex]));
+      result := ReadData(fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
+      if CanReceiveOrSend then
+        if result = 0 then // no socket error occured
         begin
           fReadStream.Position := 0;
-          ProcessData(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
+          ProcessData(fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
           fReadStream.Position := 0;
-
           if (fReadCode in [wsCodeText, wsCodeBinary]) and fFullDataProcess then
           begin
             fFullDataStream.Size := 0;
@@ -1140,121 +966,130 @@ begin
             fFullDataStream.CopyFrom(fReadStream, fReadStream.Size);
             fReadStream.Position := 0;
           end;
-          //if (fReadFinal) then //final frame
+          //if (fReadFinal) then // final frame
           begin
             case fReadCode of
-              wsCodeContinuation: begin
-                if (lastDataCode = wsCodeText) then
+              wsCodeContinuation:
+              begin
+                if lastDataCode = wsCodeText then
                 begin
-                  s := ReadStrFromStream(fReadStream, fReadStream.size);
-                  ProcessTextContinuation(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, s);
+                  s := ReadStrFromStream(fReadStream, fReadStream.Size);
+                  ProcessTextContinuation(fReadFinal, fReadRes1, fReadRes2, fReadRes3, s);
                   DoSyncRead;
                 end
-                else if (lastDataCode = wsCodeBinary) then
+                else if lastDataCode = wsCodeBinary then
                 begin
-                  ProcessStreamContinuation(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, fReadStream);
+                  ProcessStreamContinuation(fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadStream);
                   DoSyncRead;
                 end
-                else Close(wsCloseErrorProtocol, 'Unknown continuaton');
-                if (fReadFinal) then lastDataCode := -1;
+                else
+                  Close(wsCloseErrorProtocol, 'Unknown continuaton');
+                if fReadFinal then
+                  lastDataCode := -1;
               end;
-              wsCodeText: begin // text, binary frame
-                s := ReadStrFromStream(fReadStream, fReadStream.size);
-                ProcessText(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, s);
+              wsCodeText: // text, binary frame
+              begin
+                s := ReadStrFromStream(fReadStream, fReadStream.Size);
+                ProcessText(fReadFinal, fReadRes1, fReadRes2, fReadRes3, s);
                 DoSyncRead;
-                if (not fReadFinal) then lastDataCode := wsCodeText
-                else lastDataCode := -1;
+                if not fReadFinal then
+                  lastDataCode := wsCodeText
+                else
+                  lastDataCode := -1;
                 lastDataCode2 := wsCodeText;
               end;
-              wsCodeBinary: begin // text, binary frame
-                ProcessStream(fReadFinal,  fReadRes1, fReadRes2, fReadRes3, fReadStream);
+              wsCodeBinary: // text, binary frame
+              begin
+                ProcessStream(fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadStream);
                 DoSyncRead;
-                if (not fReadFinal) then lastDataCode := wsCodeBinary
-                else lastDataCode := -1;
+                if not fReadFinal then
+                  lastDataCode := wsCodeBinary
+                else
+                  lastDataCode := -1;
                 lastDataCode2 := wsCodeBinary;
               end;
-              wsCodeClose: begin //connection close
+              wsCodeClose: // connection close
+              begin
                 closeCode := wsCloseNoStatus;
-                closeResult := ReadStrFromStream(fReadStream, fReadStream.size);
-                if (length(closeResult) > 1) then
+                closeResult := ReadStrFromStream(fReadStream, fReadStream.Size);
+                if Length(closeResult) > 1 then
                 begin
-                  closeCode := ord(closeResult[1])*256 + ord(closeResult[2]);
-                  delete(closeResult, 1, 2);
+                  closeCode := Ord(closeResult[1]) * 256 + Ord(closeResult[2]);
+                  Delete(closeResult, 1, 2);
                 end;
-                fClosedByPeer := true;
-                //OutputDebugString(pChar(Format('closing1 %d', [fIndex])));
-                ProcessClose(closeCode, closeResult, true);
-                //OutputDebugString(pChar(Format('closing2 %d', [fIndex])));
+                fClosedByPeer := True;
+                //ODS(Format('closing1 %d', [fIndex]));
+                ProcessClose(closeCode, closeResult, True);
+                //ODS(Format('closing2 %d', [fIndex]));
                 TerminateThread;
-                //OutputDebugString(pChar(Format('closing3 %d', [fIndex])));
+                //ODS(Format('closing3 %d', [fIndex]));
                 fSendCriticalSection.Enter;
               end;
-              wsCodePing: begin // ping
-                ProcessPing(ReadStrFromStream(fReadStream, fReadStream.size));
+              wsCodePing: // ping
+              begin
+                ProcessPing(ReadStrFromStream(fReadStream, fReadStream.Size));
                 DoSyncRead;
               end;
-              wsCodePong: begin // pong
-                ProcessPong(ReadStrFromStream(fReadStream, fReadStream.size));
+              wsCodePong: // pong
+              begin
+                ProcessPong(ReadStrFromStream(fReadStream, fReadStream.Size));
                 DoSyncRead;
               end
-              else begin //ERROR
+              else // ERROR
                 Close(wsCloseErrorData, Format('Unknown data type: %d', [fReadCode]));
-              end;
-
             end;
           end;
 
           if (fReadCode in [wsCodeContinuation, wsCodeText, wsCodeBinary]) and fFullDataProcess and fReadFinal then
           begin
             fFullDataStream.Position := 0;
-            if (lastDataCode2 = wsCodeText) then
+            if lastDataCode2 = wsCodeText then
             begin
-              s := ReadStrFromStream(fFullDataStream, fFullDataStream.size);
+              s := ReadStrFromStream(fFullDataStream, fFullDataStream.Size);
               ProcessTextFull(s);
             end
-            else if (lastDataCode2 = wsCodeBinary) then ProcessStreamFull(fFullDataStream);
+            else if lastDataCode2 = wsCodeBinary then
+              ProcessStreamFull(fFullDataStream);
             SyncReadFull;
           end;
         end
         else
           TerminateThread;
-      end;
     end;
   finally
-    {$IFDEF UNIX} sleep(2000); {$ENDIF UNIX}
+{$IFDEF UNIX}
+    Sleep(2000);
+{$ENDIF}
   end;
-  while not terminated do sleep(500);
-  //OutputDebugString(pChar(Format('terminating %d', [fIndex])));
+  while not Terminated do
+    Sleep(500);
+  //ODS(Format('terminating %d', [fIndex]));
   fSendCriticalSection.Enter;
 end;
 
-function TWebSocketCustomConnection.GetClosed: boolean;
+function TWebSocketCustomConnection.GetClosed: Boolean;
 begin
-  result := not CanReceiveOrSend;
+  Result := not CanReceiveOrSend;
 end;
 
-function TWebSocketCustomConnection.GetClosing: boolean;
+function TWebSocketCustomConnection.GetClosing: Boolean;
 begin
-  result := (fClosedByMe or fClosedByPeer);
+  Result := fClosedByMe or fClosedByPeer;
 end;
 
 procedure TWebSocketCustomConnection.Ping(aData: string);
 begin
-  if (CanReceiveOrSend) then
-  begin
-    SendData(true, false, false, false, wsCodePing, aData);
-  end;
+  if CanReceiveOrSend then
+    SendData(True, False, False, False, wsCodePing, aData);
 end;
 
 procedure TWebSocketCustomConnection.Pong(aData: string);
 begin
-  if (CanReceiveOrSend) then
-  begin
-    SendData(true, false, false, false, wsCodePong, aData);
-  end;
+  if CanReceiveOrSend then
+    SendData(True, False, False, False, wsCodePong, aData);
 end;
 
-procedure TWebSocketCustomConnection.ProcessClose(aCloseCode: integer; aCloseReason: string; aClosedByPeer: boolean);
+procedure TWebSocketCustomConnection.ProcessClose(aCloseCode: Integer; aCloseReason: string; aClosedByPeer: Boolean);
 begin
   fCloseCode := aCloseCode;
   fCloseReason := aCloseReason;
@@ -1262,9 +1097,7 @@ begin
   DoSyncClose;
 end;
 
-
-procedure TWebSocketCustomConnection.ProcessData(var aFinal, aRes1, aRes2,
-  aRes3: boolean; var aCode: integer; aData: TMemoryStream);
+procedure TWebSocketCustomConnection.ProcessData(var aFinal, aRes1, aRes2, aRes3: Boolean; var aCode: Integer; aData: TMemoryStream);
 begin
 
 end;
@@ -1279,32 +1112,27 @@ begin
 
 end;
 
-procedure TWebSocketCustomConnection.ProcessStream(aFinal, aRes1, aRes2,
-  aRes3: boolean; aData: TMemoryStream);
+procedure TWebSocketCustomConnection.ProcessStream(aFinal, aRes1, aRes2, aRes3: Boolean; aData: TMemoryStream);
 begin
 
 end;
 
-procedure TWebSocketCustomConnection.ProcessStreamContinuation(aFinal,
-  aRes1, aRes2, aRes3: boolean; aData: TMemoryStream);
+procedure TWebSocketCustomConnection.ProcessStreamContinuation(aFinal, aRes1, aRes2, aRes3: Boolean; aData: TMemoryStream);
 begin
 
 end;
 
-procedure TWebSocketCustomConnection.ProcessStreamFull(
-  aData: TMemoryStream);
+procedure TWebSocketCustomConnection.ProcessStreamFull(aData: TMemoryStream);
 begin
 
 end;
 
-procedure TWebSocketCustomConnection.ProcessText(aFinal, aRes1, aRes2,
-  aRes3: boolean; aData: string);
+procedure TWebSocketCustomConnection.ProcessText(aFinal, aRes1, aRes2, aRes3: Boolean; aData: string);
 begin
 
 end;
 
-procedure TWebSocketCustomConnection.ProcessTextContinuation(aFinal, aRes1,
-  aRes2, aRes3: boolean; aData: string);
+procedure TWebSocketCustomConnection.ProcessTextContinuation(aFinal, aRes1, aRes2, aRes3: Boolean; aData: string);
 begin
 
 end;
@@ -1314,55 +1142,55 @@ begin
 
 end;
 
-function GetByte(aSocket: TTCPCustomConnectionSocket; var aByte: Byte; var aTimeout: integer): integer;
+function GetByte(aSocket: TTCPCustomConnectionSocket; var aByte: Byte; var aTimeout: Integer): Integer;
 begin
   aByte := aSocket.RecvByte(aTimeout);
-  result := aSocket.LastError;
+  Result := aSocket.LastError;
 end;
 
-function hexToStr(aDec: integer; aLength: integer): string;
-var tmp: string;
-    i: integer;
+function HexToStr(aDec: Integer; aLength: Integer): string;
+var
+  tmp: string;
+  i: Integer;
 begin
   tmp := IntToHex(aDec, aLength);
-  result := '';
-  for i := 1 to (Length(tmp)+1) div 2 do
-  begin
-    result := result + ansichar(StrToInt('$'+Copy(tmp, i * 2 - 1, 2)));
-  end;
+  Result := '';
+  for i := 1 to (Length(tmp) + 1) div 2 do
+    Result := Result + AnsiChar(StrToInt('$' + Copy(tmp, i * 2 - 1, 2)));
 end;
 
-function StrToHexstr2(str: string): string;
-var i: integer;
+function StrToHexStr2(str: string): string;
+var
+  i: Integer;
 begin
-  result := '';
-  for i := 1 to Length(str) do result := result + IntToHex(ord(str[i]), 2) + ' ';
+  Result := '';
+  for i := 1 to Length(str) do
+    Result := Result + IntToHex(Ord(str[i]), 2) + ' ';
 end;
 
-
-function TWebSocketCustomConnection.ReadData(var aFinal, aRes1, aRes2, aRes3: boolean;
-  var aCode: integer; aData: TMemoryStream): integer;
-var timeout: integer;
-    b: byte;
-    mask: boolean;
-    len, i: int64;
-    mBytes: array[0..3] of byte;
-    ms: TMemoryStream;
+function TWebSocketCustomConnection.ReadData(var aFinal, aRes1, aRes2, aRes3: Boolean; var aCode: Integer; aData: TMemoryStream): Integer;
+var
+  timeout: Integer;
+  b: Byte;
+  mask: Boolean;
+  len, i: Int64;
+  mBytes: array[0..3] of Byte;
+  ms: TMemoryStream;
 begin
-  result := 0;
+  Result := 0;
   len := 0;
   //aCode := 0;
   repeat
     timeout := 10 * 1000;
     if CanReceiveOrSend then
     begin
-      //OutputDebugString(pChar(Format('%d', [Index])));
-      if (fSocket.CanReadEx(1000)) then
+      //ODS(Format('%d', [Index]));
+      if fSocket.CanReadEx(1000) then
       begin
         if CanReceiveOrSend then
         begin
           b := fSocket.RecvByte(1000);
-          if (fSocket.LastError = 0) then
+          if fSocket.LastError = 0 then
           begin
             try
               try
@@ -1373,197 +1201,184 @@ begin
                 aRes3 := (b and $10) = $10;
                 aCode := b and $F;
 
-
                 // MASK AND LENGTH
-                mask := false;
-                result := GetByte(fSocket, b, timeout);
-                if (result = 0) then
+                mask := False;
+                Result := GetByte(fSocket, b, timeout);
+                if Result = 0 then
                 begin
                   mask := (b and $80) = $80;
-                  len := (b and $7F);
-                  if (len = 126) then
+                  len := b and $7F;
+                  if len = 126 then
                   begin
-                    result := GetByte(fSocket, b, timeout);
-                    if (result = 0) then
+                    Result := GetByte(fSocket, b, timeout);
+                    if Result = 0 then
                     begin
                       len := b * $100; // 00 00
-                      result := GetByte(fSocket, b, timeout);
-                      if (result = 0) then
-                      begin
+                      Result := GetByte(fSocket, b, timeout);
+                      if Result = 0 then
                         len := len + b;
-                      end;
                     end;
                   end
-                  else if (len = 127) then    //00 00 00 00 00 00 00 00
+                  else if len = 127 then // 00 00 00 00 00 00 00 00
                   begin
-
-                    //TODO nesting og get byte should be different
-                    result := GetByte(fSocket, b, timeout);
-                    if (result = 0) then
+                    // TODO nesting og get byte should be different
+                    Result := GetByte(fSocket, b, timeout);
+                    if Result = 0 then
                     begin
                       len := b * $100000000000000;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $1000000000000;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $10000000000;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $100000000;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $1000000;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $10000;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b * $100;
                       end;
-                      if (result = 0) then
+                      if Result = 0 then
                       begin
-                        result := GetByte(fSocket, b, timeout);
+                        Result := GetByte(fSocket, b, timeout);
                         len := len + b;
                       end;
                     end;
                   end;
                 end;
 
-                if (result = 0) and (fRequireMasking) and (not mask) then
-                begin
-                  // TODO some protocol error
-                  raise Exception.Create('mask');
-                end;
+                if (Result = 0) and fRequireMasking and (not mask) then
+                  raise Exception.Create('mask'); // TODO some protocol error
 
                 // MASKING KEY
-                if (mask) and (result = 0) then
+                if mask and (Result = 0) then
                 begin
-                  result := GetByte(fSocket, mBytes[0], timeout);
-                  if (result = 0) then result := GetByte(fSocket, mBytes[1], timeout);
-                  if (result = 0) then result := GetByte(fSocket, mBytes[2], timeout);
-                  if (result = 0) then result := GetByte(fSocket, mBytes[3], timeout);
+                  Result := GetByte(fSocket, mBytes[0], timeout);
+                  if Result = 0 then
+                    Result := GetByte(fSocket, mBytes[1], timeout);
+                  if Result = 0 then
+                    Result := GetByte(fSocket, mBytes[2], timeout);
+                  if Result = 0 then
+                    Result := GetByte(fSocket, mBytes[3], timeout);
                 end;
+
                 // READ DATA
-                if (result = 0) then
+                if Result = 0 then
                 begin
                   aData.Clear;
                   ms := TMemoryStream.Create;
                   try
-                    timeout := 1000 * 60 * 60 * 2; //(len div (1024 * 1024)) * 1000 * 60;
-                    if (mask) then fSocket.RecvStreamSize(ms, timeout, len)
-                    else fSocket.RecvStreamSize(aData, timeout, len);
+                    timeout := 1000 * 60 * 60 * 2; // (len div (1024 * 1024)) * 1000 * 60;
+                    if mask then
+                      fSocket.RecvStreamSize(ms, timeout, len)
+                    else
+                      fSocket.RecvStreamSize(aData, timeout, len);
 
                     ms.Position := 0;
                     aData.Position := 0;
-                    result := fSocket.LastError;
-                    if (result = 0) then
-                    begin
-                      if (mask) then
+                    Result := fSocket.LastError;
+                    if Result = 0 then
+                      if mask then
                       begin
                         i := 0;
-                        while i < len  do
+                        while i < len do
                         begin
-                          ms.ReadBuffer(b, sizeOf(b));
+                          ms.ReadBuffer(b, SizeOf(b));
                           b := b xor mBytes[i mod 4];
                           aData.WriteBuffer(b, SizeOf(b));
-                          inc(i);
+                          Inc(i);
                         end;
                       end;
-                    end;
                   finally
-                    ms.free;
+                    ms.Free;
                   end;
                   aData.Position := 0;
-                  break;
+                  Break;
                 end;
               except
-                result := -1;
+                Result := -1;
               end;
             finally
             end;
           end
           else
           begin
-            result := -1;
+            Result := -1;
           end;
         end
         else
         begin
-          result := -1;
+          Result := -1;
         end;
       end
       else
       begin
-//        if (fSocket.CanRead(0)) then
-//          ODS(StrToHexstr2(fSocket.RecvBufferStr(10, 1000)));
+        //if (fSocket.CanRead(0)) then
+        //  ODS(StrToHexStr2(fSocket.RecvBufferStr(10, 1000)));
         if (fSocket.LastError <> WSAETIMEDOUT) and (fSocket.LastError <> 0) then
-        begin
-          //if (fSocket.LastError = WS then
-          
-          result := -1;
-        end;
+          Result := -1;
       end;
     end
     else
+      Result := -1;
+
+    if Result <> 0 then
     begin
-      result := -1;
-    end;
-    if (result <> 0) then
-    begin
-      if (not Terminated) then
-      begin
-        if (fSocket.LastError = WSAECONNRESET) then
+      if not Terminated then
+        if fSocket.LastError = WSAECONNRESET then
         begin
-          result := 0;
+          Result := 0;
           aCode := wsCodeClose;
-          aFinal := true;
-          aRes1 := false;
-          aRes2 := false;
-          aRes3 := false;
+          aFinal := True;
+          aRes1 := False;
+          aRes2 := False;
+          aRes3 := False;
           aData.Size := 0;
-          WriteStrToStream(aData, ansichar(wsCloseErrorClose div 256) + ansichar(wsCloseErrorClose mod 256));
+          WriteStrToStream(aData, AnsiChar(wsCloseErrorClose div 256) + AnsiChar(wsCloseErrorClose mod 256));
           aData.Position := 0;
         end
         else
+        if not fClosedByMe then
         begin
-          if (not fClosedByMe) then
-          begin
-            Close(wsCloseErrorProtocol, '');
-            TerminateThread;
-          end;
+          Close(wsCloseErrorProtocol, '');
+          TerminateThread;
         end;
-      end;
-      break;
+      Break;
     end
-  until false;
+  until False;
 end;
 
-
-function TWebSocketCustomConnection.SendData(aFinal, aRes1, aRes2, aRes3: boolean; aCode: integer; aData: TStream): integer;
-var b: byte;
-    s: ansistring;
-    mBytes: array[0..3] of byte;
-    ms: TMemoryStream;
-    i, len: int64;
+function TWebSocketCustomConnection.SendData(aFinal, aRes1, aRes2, aRes3: Boolean; aCode: Integer; aData: TStream): Integer;
+var
+  b: Byte;
+  s: AnsiString;
+  mBytes: array[0..3] of Byte;
+  ms: TMemoryStream;
+  i, len: Int64;
 begin
-  result := 0;
-  if (CanReceiveOrSend) or ((aCode = wsCodeClose) and (not fClosedByPeer)) then
+  Result := 0;
+  if CanReceiveOrSend or ((aCode = wsCodeClose) and (not fClosedByPeer)) then
   begin
     fSendCriticalSection.Enter;
     try
-
       s := '';
 
       // BASIC INFORMATIONS
@@ -1572,72 +1387,62 @@ begin
       b := b + IfThen(aRes2, 1, 0) * $20;
       b := b + IfThen(aRes3, 1, 0) * $10;
       b := b + aCode;
-      s := s + ansichar(b);
+      s := s + AnsiChar(b);
 
       // MASK AND LENGTH
       b := IfThen(fMasking, 1, 0) * $80;
-      if (aData.Size < 126) then
+      if aData.Size < 126 then
         b := b + aData.Size
-      else if (aData.Size < 65536) then
+      else if aData.Size < 65536 then
         b := b + 126
       else
         b := b + 127;
-      s := s + ansichar(b);
-      if (aData.Size >= 126) then
-      begin
-        if (aData.Size < 65536) then
-        begin
-          s := s + hexToStr(aData.Size, 4);
-        end
+      s := s + AnsiChar(b);
+      if aData.Size >= 126 then
+        if aData.Size < 65536 then
+          s := s + HexToStr(aData.Size, 4)
         else
-        begin
-          s := s + hexToStr(aData.Size, 16);
-        end;
-      end;
+          s := s + HexToStr(aData.Size, 16);
 
       // MASKING KEY
-      if (fMasking) then
+      if fMasking then
       begin
         mBytes[0] := Random(256);
         mBytes[1] := Random(256);
         mBytes[2] := Random(256);
         mBytes[3] := Random(256);
-
-
-        s := s + ansichar(mBytes[0]);
-        s := s + ansichar(mBytes[1]);
-        s := s + ansichar(mBytes[2]);
-        s := s + ansichar(mBytes[3]);
+        s := s + AnsiChar(mBytes[0]);
+        s := s + AnsiChar(mBytes[1]);
+        s := s + AnsiChar(mBytes[2]);
+        s := s + AnsiChar(mBytes[3]);
       end;
 
       fSocket.SendString(s);
-      result := fSocket.LastError;
-      if (result = 0) then
+      Result := fSocket.LastError;
+      if Result = 0 then
       begin
         aData.Position := 0;
         ms := TMemoryStream.Create;
         try
-          if (not fMasking) then
-          begin
-            fSocket.SendStreamRaw(aData);
-          end
+          if not fMasking then
+            fSocket.SendStreamRaw(aData)
           else
           begin
             i := 0;
             len := aData.Size;
-            while i < len  do
+            while i < len do
             begin
               aData.ReadBuffer(b, sizeOf(b));
               b := b xor mBytes[i mod 4];
               ms.WriteBuffer(b, SizeOf(b));
-              inc(i);
+              Inc(i);
             end;
             ms.Position := 0;
             fSocket.SendStreamRaw(ms);
           end;
 
-          result := fSocket.LastError;
-          if (result = 0) then
+          Result := fSocket.LastError;
+          if Result = 0 then
           begin
             fWriteFinal := aFinal;
             fWriteRes1 := aRes1;
@@ -1655,125 +1460,114 @@ begin
         end;
       end;
     finally
-      if (aCode <> wsCodeClose) then
-        while not fSocket.CanWrite(10) do sleep(10);
+      if aCode <> wsCodeClose then
+        while not fSocket.CanWrite(10) do
+          Sleep(10);
       fSendCriticalSection.Leave;
     end;
   end;
 end;
 
-function TWebSocketCustomConnection.SendData(aFinal, aRes1, aRes2, aRes3: boolean; aCode: integer; aData: string): integer;
-var ms : TMemoryStream;
+function TWebSocketCustomConnection.SendData(aFinal, aRes1, aRes2, aRes3: Boolean; aCode: Integer; aData: string): Integer;
+var
+  ms: TMemoryStream;
 begin
   ms := TMemoryStream.Create;
   try
     WriteStrToStream(ms, aData);
-    result := SendData(aFinal, aRes1, aRes2, aRes3, aCode, ms);
+    Result := SendData(aFinal, aRes1, aRes2, aRes3, aCode, ms);
   finally
     ms.Free;
   end;
 end;
 
-procedure TWebSocketCustomConnection.SendBinary(aData: TStream; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
+procedure TWebSocketCustomConnection.SendBinary(aData: TStream; aFinal: Boolean = True; aRes1: Boolean = False;
+  aRes2: Boolean = False; aRes3: Boolean = False);
 begin
   SendData(aFinal, aRes1, aRes2, aRes3, wsCodeBinary, aData);
 end;
 
-procedure TWebSocketCustomConnection.SendBinaryContinuation(aData: TStream; aFinal, aRes1, aRes2, aRes3: boolean);
+procedure TWebSocketCustomConnection.SendBinaryContinuation(aData: TStream; aFinal, aRes1, aRes2, aRes3: Boolean);
 begin
   SendData(aFinal, aRes1, aRes2, aRes3, wsCodeContinuation, aData);
 end;
 
-procedure TWebSocketCustomConnection.SendText(aData: string; aFinal: boolean = true; aRes1: boolean = false;  aRes2: boolean = false;  aRes3: boolean = false);
+procedure TWebSocketCustomConnection.SendText(aData: string; aFinal: Boolean = True; aRes1: Boolean = False;
+  aRes2: Boolean = False; aRes3: Boolean = False);
 begin
   SendData(aFinal, aRes1, aRes2, aRes3, wsCodeText, aData);
 end;
 
-procedure TWebSocketCustomConnection.SendTextContinuation(aData: string; aFinal, aRes1, aRes2, aRes3: boolean);
+procedure TWebSocketCustomConnection.SendTextContinuation(aData: string; aFinal, aRes1, aRes2, aRes3: Boolean);
 begin
   SendData(aFinal, aRes1, aRes2, aRes3, wsCodeContinuation, aData);
 end;
 
 {
-procedure TWebSocketCustomConnection.SendStream(aFinal, aRes1, aRes2, aRes3: boolean; aData: TStream);
+procedure TWebSocketCustomConnection.SendStream(aFinal, aRes1, aRes2, aRes3: Boolean; aData: TStream);
 begin
-  if (CanReceiveOrSend) then
-  begin
+  if CanReceiveOrSend then
     SendData(aFinal, aRes1, aRes2, aRes3, wsCodeBinary, aData);
-  end;
 end;
 }
 {
 procedure TWebSocketCustomConnection.SendStream(aData: TStream);
 begin
-  //SendStream(aFinal, false, false, false, aData);
+  //SendStream(aFinal, False, False, False, aData);
 end;
 }
 {
-procedure TWebSocketCustomConnection.SendText(aFinal, aRes1, aRes2, aRes3: boolean; aData: string);
-//var tmp: string;
+procedure TWebSocketCustomConnection.SendText(aFinal, aRes1, aRes2, aRes3: Boolean; aData: string);
 begin
-  if (CanReceiveOrSend) then
-  begin
-    SendData(aFinal, false, false, false, wsCodeText, aData);
-  end;
+  if CanReceiveOrSend then
+    SendData(aFinal, False, False, False, wsCodeText, aData);
 end;
 }
 {
 procedure TWebSocketCustomConnection.SendText(aData: string);
 begin
-  //SendText(true, false, false, false, aData);
-  //SendData(true, false, false
+  //SendText(True, False, False, False, aData);
+  //SendData(True, False, False
 end;
 }
 procedure TWebSocketCustomConnection.SyncClose;
 begin
-  if (assigned(fOnClose)) then
-    fOnClose(self, fCloseCode, fCloseReason, fClosingByPeer);
+  if Assigned(fOnClose) then
+    fOnClose(Self, fCloseCode, fCloseReason, fClosingByPeer);
 end;
 
 procedure TWebSocketCustomConnection.SyncOpen;
 begin
-  if (assigned(fOnOpen)) then
-    fOnOpen(self);
-end;
-{
-procedure TWebSocketCustomConnection.SyncPing;
-begin
-
+  if Assigned(fOnOpen) then
+    fOnOpen(Self);
 end;
 
-procedure TWebSocketCustomConnection.SyncPong;
-begin
-
-end;
-}
 procedure TWebSocketCustomConnection.SyncRead;
 begin
   fReadStream.Position := 0;
-  if (assigned(fOnRead)) then
-    fOnRead(self, fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
+  if Assigned(fOnRead) then
+    fOnRead(Self, fReadFinal, fReadRes1, fReadRes2, fReadRes3, fReadCode, fReadStream);
 end;
 
 procedure TWebSocketCustomConnection.SyncReadFull;
 begin
   fFullDataStream.Position := 0;
-  if (assigned(fOnReadFull)) then
-    fOnReadFull(self, fReadCode, fFullDataStream);
+  if Assigned(fOnReadFull) then
+    fOnReadFull(Self, fReadCode, fFullDataStream);
 end;
 
 procedure TWebSocketCustomConnection.SyncWrite;
 begin
   fWriteStream.Position := 0;
-  if (assigned(fOnWrite)) then
-    fOnWrite(self, fWriteFinal, fWriteRes1, fWriteRes2, fWriteRes3, fWriteCode, fWriteStream);
+  if Assigned(fOnWrite) then
+    fOnWrite(Self, fWriteFinal, fWriteRes1, fWriteRes2, fWriteRes3, fWriteCode, fWriteStream);
 end;
 
 procedure TWebSocketCustomConnection.TerminateThread;
 begin
-  if (Terminated) then exit;
-
-  if (not Closed) then
+  if Terminated then
+    Exit;
+  if not Closed then
     DoSyncClose;
   Socket.OnSyncStatus := nil;
   Socket.OnStatus := nil;
@@ -1784,34 +1578,29 @@ begin
   fOnOpen := nil;
   {
   if not Closing then
-  begin
-    SendData(true, false, false, false, wsCodeClose, '1001');
-  end;
+    SendData(True, False, False, False, wsCodeClose, '1001');
   }
   inherited;
 end;
 
-function TWebSocketCustomConnection.ValidConnection: boolean;
+function TWebSocketCustomConnection.ValidConnection: Boolean;
 begin
-  result := (not IsTerminated) and (Socket.Socket <> INVALID_SOCKET);
+  Result := (not IsTerminated) and (Socket.Socket <> INVALID_SOCKET);
 end;
-
-
 
 { TWebSocketServerConnection }
 
-procedure TWebSocketServerConnection.Close(aCode: integer; aCloseReason: string);
+procedure TWebSocketServerConnection.Close(aCode: Integer; aCloseReason: string);
 begin
   if (Socket.Socket <> INVALID_SOCKET) and (not fClosedByMe) then
   begin
-    fClosedByMe := true;
-    if (not fClosedByPeer) then
+    fClosedByMe := True;
+    if not fClosedByPeer then
     begin
-      SendData(true, false, false, false, wsCodeClose, hexToStr(aCode, 4) + copy(aCloseReason, 1, 123));
+      SendData(True, False, False, False, wsCodeClose, HexToStr(aCode, 4) + Copy(aCloseReason, 1, 123));
       //Sleep(2000);
-      ProcessClose(aCode, aCloseReason, false);
+      ProcessClose(aCode, aCloseReason, False);
     end;
-
     TerminateThread;
   end;
 end;
@@ -1819,98 +1608,99 @@ end;
 constructor TWebSocketServerConnection.Create(aSocket: TTCPCustomConnectionSocket);
 begin
   inherited;
-  fRequireMasking := true;
+  fRequireMasking := True;
 end;
 
 procedure TWebSocketServerConnection.TerminateThread;
 begin
-  if (Terminated) then exit;
+  if Terminated then
+    Exit;
   //if (not TWebSocketServer(fParent).Terminated) and (not fClosedByMe) then DoSyncClose;
   fOnClose := nil;
   inherited;
-
 end;
 
 { TWebSocketClientConnection }
 
-function TWebSocketClientConnection.BeforeExecuteConnection: boolean;
-var key, s, get: string;
-    i: integer;
-    headers: TStringList;
+function TWebSocketClientConnection.BeforeExecuteConnection: Boolean;
+var
+  key, s, get: string;
+  i: Integer;
+  headers: TStringList;
 begin
   Result := not IsTerminated;
-  if (Result) then
+  if Result then
   begin
     s := Format('GET %s HTTP/1.1' + #13#10, [fResourceName]);
     s := s + Format('Upgrade: websocket' + #13#10, []);
     s := s + Format('Connection: Upgrade' + #13#10, []);
     s := s + Format('Host: %s:%s' + #13#10, [fHost, fPort]);
 
-    for I := 1 to 16 do key := key + ansichar(Random(85) + 32);
+    for I := 1 to 16 do
+      key := key + AnsiChar(Random(85) + 32);
     key := EncodeBase64(key);
-    s := s + Format('Sec-WebSocket-Key: %s' + #13#10, [(key)]);
+    s := s + Format('Sec-WebSocket-Key: %s' + #13#10, [key]);
     s := s + Format('Sec-WebSocket-Version: %d' + #13#10, [fVersion]);
 
-    //TODO extensions
-    if (fProtocol <> '-') then
+    // TODO extensions
+    if fProtocol <> '-' then
       s := s + Format('Sec-WebSocket-Protocol: %s' + #13#10, [fProtocol]);
-    if (fOrigin <> '-') then
-    begin
-      if (fVersion < 13) then
+    if fOrigin <> '-' then
+      if fVersion < 13 then
         s := s + Format('Sec-WebSocket-Origin: %s' + #13#10, [fOrigin])
       else
         s := s + Format('Origin: %s' + #13#10, [fOrigin]);
-    end;
-    if (fCookie <> '-') then
-      s := s + Format('Cookie: %s' + #13#10, [(fCookie)]);
-    if (fExtension <> '-') then
+    if fCookie <> '-' then
+      s := s + Format('Cookie: %s' + #13#10, [fCookie]);
+    if fExtension <> '-' then
       s := s + Format('Sec-WebSocket-Extensions: %s' + #13#10, [fExtension]);
     s := s + #13#10;
     fSocket.SendString(s);
     Result := (not IsTerminated) and (fSocket.LastError = 0);
-    if (result) then
+    if Result then
     begin
       headers := TStringList.Create;
       try
-        result := ReadHttpHeaders(fSocket, get, headers);
-        if (result) then result := pos(LowerCase('HTTP/1.1 101'), LowerCase(get)) = 1;
-        if (result) then result := (LowerCase(headers.Values['upgrade']) = LowerCase('websocket')) and (LowerCase(headers.Values['connection']) = 'upgrade');
+        Result := ReadHttpHeaders(fSocket, get, headers);
+        if Result then
+          Result := Pos(LowerCase('HTTP/1.1 101'), LowerCase(get)) = 1;
+        if Result then
+          Result := (LowerCase(headers.Values['upgrade']) = LowerCase('websocket')) and
+            (LowerCase(headers.Values['connection']) = 'upgrade');
         fProtocol := '-';
         fExtension := '-';
-        if (headers.IndexOfName('sec-websocket-protocol') > -1) then
-          fProtocol := trim(headers.Values['sec-websocket-protocol']);
-        if (headers.IndexOfName('sec-websocket-extensions') > -1) then
-          fExtension := trim(headers.Values['sec-websocket-extensions']);
-        if (result) then result := (headers.Values['sec-websocket-accept'] = EncodeBase64(SHA1(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
-
+        if headers.IndexOfName('sec-websocket-protocol') > -1 then
+          fProtocol := Trim(headers.Values['sec-websocket-protocol']);
+        if headers.IndexOfName('sec-websocket-extensions') > -1 then
+          fExtension := Trim(headers.Values['sec-websocket-extensions']);
+        if Result then
+          Result := (headers.Values['sec-websocket-accept'] = EncodeBase64(SHA1(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
       finally
         headers.Free;
       end;
     end;
-
   end;
-  if (result) then fHandshake := true;
-  
+  if Result then
+    fHandshake := True;
 end;
 
-procedure TWebSocketClientConnection.Close(aCode: integer; aCloseReason: string);
+procedure TWebSocketClientConnection.Close(aCode: Integer; aCloseReason: string);
 begin
   if ValidConnection and (not fClosedByMe) then
   begin
-    fClosedByMe := true;
-    if (not fClosedByPeer) then
+    fClosedByMe := True;
+    if not fClosedByPeer then
     begin
-      SendData(true, false, false, false, wsCodeClose, hexToStr(aCode, 4) + copy(aCloseReason, 1, 123));
+      SendData(True, False, False, False, wsCodeClose, HexToStr(aCode, 4) + Copy(aCloseReason, 1, 123));
       //Sleep(2000);
-      ProcessClose(aCode, aCloseReason, false);
+      ProcessClose(aCode, aCloseReason, False);
     end;
-
     TerminateThread;
   end;
 end;
 
-constructor TWebSocketClientConnection.Create(aHost, aPort,
-  aResourceName, aOrigin, aProtocol: string; aExtension: string;  aCookie: string;  aVersion: integer);
+constructor TWebSocketClientConnection.Create(aHost, aPort, aResourceName, aOrigin, aProtocol: string;
+  aExtension: string; aCookie: string; aVersion: Integer);
 begin
   fSocket := TTCPCustomConnectionSocket.Create;
   inherited Create(fSocket);
@@ -1920,57 +1710,28 @@ begin
   fResourceName := aResourceName;
   fProtocol := aProtocol;
   fVersion := aVersion;
-  fMasking := true;
+  fMasking := True;
   fCookie := aCookie;
   fExtension := aExtension;
 end;
 
-{
-procedure TWebSocketClientConnection.DoConnect;
-begin
-  if (assigned(fOnConnect)) then
-    Synchronize(SyncConnect);
-
-end;
-
-procedure TWebSocketClientConnection.DoDisconnect;
-begin
-  if (assigned(fOnDisConnect)) then
-    Synchronize(SyncDisconnect);
-
-end;
-}
 procedure TWebSocketClientConnection.Execute;
 begin
   if (not IsTerminated) and (fVersion >= 8) then
   begin
     fSocket.Connect(fHost, fPort);
-    if (SSL) then
+    if SSL then
       fSocket.SSLDoConnect;
-    if (fSocket.LastError = 0) then
-    begin
-      //DoConnect;
-      inherited Execute;
-      //DoDisconnect;
-    end
-    else TerminateThread;
+    if fSocket.LastError = 0 then
+      inherited Execute
+    else
+      TerminateThread;
   end;
 end;
-{
-procedure TWebSocketClientConnection.SyncConnect;
-begin
-  fOnConnect(self);
-end;
-
-procedure TWebSocketClientConnection.SyncDisconnect;
-begin
-  fOnDisConnect(self);
-end;
-}
-
 
 initialization
-Randomize;
+
+  Randomize;
 
 {
 GET / HTTP/1.1
@@ -1980,7 +1741,6 @@ Host: 81.0.231.149:81
 Sec-WebSocket-Origin: http://html5.bauglir.dev
 Sec-WebSocket-Key: Q9ceXTuzjdF2o23CRYvnuA==
 Sec-WebSocket-Version: 8
-
 
 GET / HTTP/1.1
 Host: 81.0.231.149:81

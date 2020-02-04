@@ -23,13 +23,12 @@ interface
 uses
   {$IFDEF UNIX}
   cthreads,
-  {$ELSE UNIX}
-  windows,
+  {$ELSE}
+  Windows,
   {$ENDIF}
   Classes, SysUtils, SyncObjs;
 
-Type
-
+type
   {:abstract(Basic library aware thread)
     See @BauglirInDll variable
   }
@@ -43,10 +42,10 @@ Type
   end;
 
 var
-  {:If @TRUE, than method passed TBThread.Synchronize will be executed directly,
-    without synchronization, useful for libraries and cosole projects.
+  {:If @TRUE, then method passed TBThread.Synchronize will be executed directly,
+    without synchronization, useful for libraries and console projects.
   }
-  BauglirSynchronizeThreads: boolean = false;
+  BauglirSynchronizeThreads: Boolean = False;
 
 implementation
 
@@ -67,8 +66,10 @@ end;
 procedure TBThread.Synchronize(AMethod: TThreadMethod);
 begin
   //fSyncLock.Enter;
-  if (BauglirSynchronizeThreads) or (GetCurrentThreadID = MainThreadID) then aMethod
-  else inherited Synchronize(aMethod);
+  if (BauglirSynchronizeThreads) or (GetCurrentThreadID = MainThreadID) then
+    aMethod
+  else
+    inherited Synchronize(aMethod);
   //fSyncLock.Leave;
 end;
 

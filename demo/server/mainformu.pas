@@ -92,8 +92,8 @@ type
       aCode: Integer; aData: TMemoryStream);
     procedure DoConnectionWrite(aSender: TWebSocketCustomConnection; aFinal, aRes1, aRes2, aRes3: Boolean;
       aCode: Integer; aData: TMemoryStream);
-    procedure DoConnectionClose(aSender: TWebSocketCustomConnection; aCloseCode: Integer; aCloseReason: String; aClosedByPeer: Boolean);
-    procedure DoConnectionSocket(Sender: TObject; Reason: THookSocketReason; const Value: String);
+    procedure DoConnectionClose(aSender: TWebSocketCustomConnection; aCloseCode: Integer; aCloseReason: string; aClosedByPeer: Boolean);
+    procedure DoConnectionSocket(Sender: TObject; Reason: THookSocketReason; const Value: string);
     function ListItemByIndex(aConnectionIndex: Integer): TListItem;
   end;
 
@@ -104,8 +104,8 @@ type
   TTestWebSocketServer = class(TWebSocketServer)
   public
     function GetWebSocketConnectionClass(Socket: TTCPCustomConnectionSocket; Header: TStringList;
-      ResourceName, Host, Port, Origin, Cookie: String; out HttpResult: Integer;
-      var Protocol, Extensions: String): TWebSocketServerConnections; override;
+      ResourceName, Host, Port, Origin, Cookie: string; out HttpResult: Integer;
+      var Protocol, Extensions: string): TWebSocketServerConnections; override;
   end;
 
   TTestWebSocketServerConnection = class(TWebSocketServerConnection)
@@ -139,7 +139,6 @@ uses
 procedure TMainForm.StartActionExecute(Sender: TObject);
 begin
   ServerErrorLabel.Caption := '';
-
   fServer := TTestWebSocketServer.Create(HostCombo.Text, PortCombo.Text);
   fServer.OnAfterAddConnection := DoServerAfterAddConnection;
   fServer.OnBeforeAddConnection := DoServerBeforeAddConnection;
@@ -155,17 +154,12 @@ end;
 
 procedure TMainForm.SendTextActionExecute(Sender: TObject);
 var
-  I: Integer;
+  i: Integer;
 begin
   fServer.LockTermination;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if ConnectionList.Items[I].Selected then
-    begin
-      TWebSocketCustomConnection(ConnectionList.Items[I].Data).SendText(CharsetConversion(SendSelectedMemo.Text, GetCurCP, UTF_8));
-      //ConnectionList.Items[I].Selected := false;
-    end;
-  end;
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if ConnectionList.Items[i].Selected then
+      TWebSocketCustomConnection(ConnectionList.Items[i].Data).SendText(CharsetConversion(SendSelectedMemo.Text, GetCurCP, UTF_8));
   fServer.UnLockTermination;
 end;
 
@@ -204,17 +198,15 @@ end;
 
 procedure TMainForm.DoServerBeforeRemoveConnection(Server: TCustomServer; aConnection: TCustomConnection);
 var
-  I: Integer;
+  i: Integer;
 begin
   InfoMemo.Lines.Insert(0, Format('DoServerBeforeRemoveConnection %d', [aConnection.Index]));
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if TCustomConnection(ConnectionList.Items[I].Data).Index = aConnection.Index then
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if TCustomConnection(ConnectionList.Items[i].Data).Index = aConnection.Index then
     begin
-      ConnectionList.Items.Delete(I);
+      ConnectionList.Items.Delete(i);
       Break;
     end;
-  end;
 end;
 
 procedure TMainForm.DoServerSocketError(Server: TCustomServer; Socket: TTCPBlockSocket);
@@ -232,33 +224,33 @@ end;
 procedure TMainForm.DoConnectionRead(aSender: TWebSocketCustomConnection; aFinal, aRes1, aRes2, aRes3: Boolean;
   aCode: Integer; aData: TMemoryStream);
 var
-  Item: TListItem;
+  item: TListItem;
 begin
   InfoMemo.Lines.Insert(0, Format('DoConnectionRead %d, final: %d, ext1: %d, ext2: %d, ext3: %d, type: %d, length: %d',
     [aSender.Index, Ord(aFinal), Ord(aRes1), Ord(aRes2), Ord(aRes3), aCode, aData.Size]));
-  Item := ListItemByIndex(aSender.Index);
-  Item.SubItems[0] := IntToStr(StrToInt(Item.SubItems[0]) + 1);
+  item := ListItemByIndex(aSender.Index);
+  item.SubItems[0] := IntToStr(StrToInt(item.SubItems[0]) + 1);
 end;
 
 procedure TMainForm.DoConnectionWrite(aSender: TWebSocketCustomConnection; aFinal, aRes1, aRes2, aRes3: Boolean;
   aCode: Integer; aData: TMemoryStream);
 var
-  Item: TListItem;
+  item: TListItem;
 begin
   InfoMemo.Lines.Insert(0, Format('DoConnectionWrite %d, final: %d, ext1: %d, ext2: %d, ext3: %d, type: %d, length: %d',
     [aSender.Index, Ord(aFinal), Ord(aRes1), Ord(aRes2), Ord(aRes3), aCode, aData.Size]));
-  Item := ListItemByIndex(aSender.Index);
-  Item.SubItems[1] := IntToStr(StrToInt(Item.SubItems[1]) + 1);
+  item := ListItemByIndex(aSender.Index);
+  item.SubItems[1] := IntToStr(StrToInt(item.SubItems[1]) + 1);
 end;
 
-procedure TMainForm.DoConnectionClose(aSender: TWebSocketCustomConnection; aCloseCode: Integer; aCloseReason: String;
+procedure TMainForm.DoConnectionClose(aSender: TWebSocketCustomConnection; aCloseCode: Integer; aCloseReason: string;
   aClosedByPeer: Boolean);
 begin
   InfoMemo.Lines.Insert(0, Format('DoConnectionClose %d, %d, %s, %s', [aSender.Index, aCloseCode, aCloseReason,
     IfThen(aClosedByPeer, 'closed by peer', 'closed by me')]));
 end;
 
-procedure TMainForm.DoConnectionSocket(Sender: TObject; Reason: THookSocketReason; const Value: String);
+procedure TMainForm.DoConnectionSocket(Sender: TObject; Reason: THookSocketReason; const Value: string);
 begin
   InfoMemo.Lines.Insert(0, Format('DoConnectionSocket %d, %s, %s', [TTCPCustomConnectionSocket(Sender).Connection.Index,
     GetEnumName(TypeInfo(THookSocketReason), Ord(Reason)), Value]));
@@ -266,18 +258,16 @@ end;
 
 function TMainForm.ListItemByIndex(aConnectionIndex: Integer): TListItem;
 var
-  I: Integer;
+  i: Integer;
 begin
   fServer.LockTermination;
   Result := nil;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if TCustomConnection(ConnectionList.Items[I].Data).Index = aConnectionIndex then
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if TCustomConnection(ConnectionList.Items[i].Data).Index = aConnectionIndex then
     begin
-      Result := ConnectionList.Items[I];
+      Result := ConnectionList.Items[i];
       Break;
     end;
-  end;
   fServer.UnLockTermination;
 end;
 
@@ -301,45 +291,43 @@ end;
 
 procedure TMainForm.CloseActionExecute(Sender: TObject);
 var
-  I: Integer;
+  i: Integer;
 begin
   fServer.LockTermination;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if ConnectionList.Items[I].Selected then
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if ConnectionList.Items[i].Selected then
     begin
-      ConnectionList.Items[I].Selected := False;
-      TWebSocketCustomConnection(ConnectionList.Items[I].Data).Close(wsCloseNormal, 'closing connection');
+      ConnectionList.Items[i].Selected := False;
+      TWebSocketCustomConnection(ConnectionList.Items[i].Data).Close(wsCloseNormal, 'closing connection');
     end;
-  end;
   fServer.UnLockTermination;
 end;
 
 procedure TMainForm.ConnectionListChange(Sender: TObject; Item: TListItem; Change: TItemChange);
 var
-  S: String;
-  C: TTestWebSocketServerConnection;
+  s: string;
+  c: TTestWebSocketServerConnection;
 begin
   LastSentMemo.Lines.Text := '';
   LastReceivedMemo.Lines.Text := '';
   ConnectionInfoMemo.Text := '';
-  if (Change = ctState) and (Item.Selected) and (ConnectionList.SelCount = 1) then
+  if (Change = ctState) and Item.Selected and (ConnectionList.SelCount = 1) then
   begin
     //TWebSocketCustomConnection(ConnectionList.Items[I]. Data).SendText(SendSelectedMemo.Text)
-    C := TTestWebSocketServerConnection(Item.Data);
-    S := ReadStrFromStream(C.ReadStream, Min(C.ReadStream.Size, 10 * 1024));
-    if C.ReadCode = wsCodeText then
-      LastReceivedMemo.Lines.Text := CharsetConversion(S, UTF_8, GetCurCP)
+    c := TTestWebSocketServerConnection(Item.Data);
+    s := ReadStrFromStream(c.ReadStream, Min(c.ReadStream.Size, 10 * 1024));
+    if c.ReadCode = wsCodeText then
+      LastReceivedMemo.Lines.Text := CharsetConversion(s, UTF_8, GetCurCP)
     else
-      LastReceivedMemo.Lines.Text := S;
-    S := ReadStrFromStream(C.WriteStream, Min(C.WriteStream.Size, 10 * 1024));
-    if C.WriteCode = wsCodeText then
-      LastSentMemo.Lines.Text := CharsetConversion(S, UTF_8, GetCurCP)
+      LastReceivedMemo.Lines.Text := s;
+    s := ReadStrFromStream(c.WriteStream, Min(c.WriteStream.Size, 10 * 1024));
+    if c.WriteCode = wsCodeText then
+      LastSentMemo.Lines.Text := CharsetConversion(s, UTF_8, GetCurCP)
     else
-      LastSentMemo.Lines.Text := S;
-    C.ReadStream.Position := 0;
-    C.WriteStream.Position := 0;
-    ConnectionInfoMemo.Text := C.Header.Text;
+      LastSentMemo.Lines.Text := s;
+    c.ReadStream.Position := 0;
+    c.WriteStream.Position := 0;
+    ConnectionInfoMemo.Text := c.Header.Text;
   end;
 end;
 
@@ -350,10 +338,10 @@ end;
 
 procedure TMainForm.LoadImageActionExecute(Sender: TObject);
 var
-  MS1, MS2, MS3: TMemoryStream;
-  FS: TFileStream;
-  L, I: Integer;
-  C: TWebSocketCustomConnection;
+  ms1, ms2, ms3: TMemoryStream;
+  fs: TFileStream;
+  len, i: Integer;
+  c: TWebSocketCustomConnection;
 begin
   OpenPictureDialog.Filter :=
     'All (*.png;*.bmp;*.ico;*.emf;*.wmf)|*.png;*.bmp;*.ico;*.emf;*.wmf|PNG Image File (*.png)|*.png|Bitmaps (*.bmp)|*.bmp|Icons (*.ico)|*.ico|Enhanced Metafiles (*.emf)|*.emf|Metafiles (*.wmf)|*.wmf';
@@ -361,102 +349,94 @@ begin
   begin
     Image1.Picture.LoadFromFile(OpenPictureDialog.FileName);
 
-    MS1 := TMemoryStream.Create;
-    MS2 := TMemoryStream.Create;
-    MS3 := TMemoryStream.Create;
-    FS := TFileStream.Create(OpenPictureDialog.FileName, fmOpenRead);
+    ms1 := TMemoryStream.Create;
+    ms2 := TMemoryStream.Create;
+    ms3 := TMemoryStream.Create;
+    fs := TFileStream.Create(OpenPictureDialog.FileName, fmOpenRead);
     try
-      FS.Position := 0;
-      L := FS.Size div 3;
-      MS1.CopyFrom(FS, L);
-      MS2.CopyFrom(FS, L);
-      MS3.CopyFrom(FS, FS.Size - 2 * L);
+      fs.Position := 0;
+      len := fs.Size div 3;
+      ms1.CopyFrom(fs, len);
+      ms2.CopyFrom(fs, len);
+      ms3.CopyFrom(fs, fs.Size - 2 * len);
       fServer.LockTermination;
-      for I := 0 to ConnectionList.Items.Count - 1 do
-      begin
-        if ConnectionList.Items[I].Selected then
+      for i := 0 to ConnectionList.Items.Count - 1 do
+        if ConnectionList.Items[i].Selected then
         begin
-          C := TWebSocketCustomConnection(ConnectionList.Items[I].Data);
-          C.SendBinary(MS1, False);
-          C.SendBinaryContinuation(MS2, False);
-          C.SendBinaryContinuation(MS3, True);
+          c := TWebSocketCustomConnection(ConnectionList.Items[i].Data);
+          c.SendBinary(ms1, False);
+          c.SendBinaryContinuation(ms2, False);
+          c.SendBinaryContinuation(ms3, True);
           {
-          FS.Position := 0;
-          C.SendBinary(FS, True);
+          fs.Position := 0;
+          c.SendBinary(fs, True);
           }
         end;
-      end;
       fServer.UnLockTermination;
     finally
-      MS1.Free;
-      MS2.Free;
-      MS3.Free;
-      FS.Free;
+      ms1.Free;
+      ms2.Free;
+      ms3.Free;
+      fs.Free;
     end;
   end;
 end;
 
 procedure TMainForm.PingActionExecute(Sender: TObject);
 var
-  I: Integer;
+  i: Integer;
 begin
   fServer.LockTermination;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if ConnectionList.Items[I].Selected then
-      TWebSocketCustomConnection(ConnectionList.Items[I].Data).Ping('ping you');
-  end;
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if ConnectionList.Items[i].Selected then
+      TWebSocketCustomConnection(ConnectionList.Items[i].Data).Ping('ping you');
   fServer.UnLockTermination;
 end;
 
 procedure TMainForm.PongActionExecute(Sender: TObject);
 var
-  I: Integer;
+  i: Integer;
 begin
   fServer.LockTermination;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if ConnectionList.Items[I].Selected then
-      TWebSocketCustomConnection(ConnectionList.Items[I].Data).Pong('pong you');
-  end;
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if ConnectionList.Items[i].Selected then
+      TWebSocketCustomConnection(ConnectionList.Items[i].Data).Pong('pong you');
   fServer.UnLockTermination;
 end;
 
 procedure TMainForm.SendFramesActionExecute(Sender: TObject);
 var
-  I, L: Integer;
-  S, S1, S2, S3: String;
-  C: TWebSocketCustomConnection;
-  US: UnicodeString;
+  i, len: Integer;
+  s, s1, s2, s3: string;
+  c: TWebSocketCustomConnection;
+  us: UnicodeString;
 begin
-  S := CharsetConversion(SendSelectedMemo2.Text, GetCurCP, UTF_8);
-  US := UTF8Decode(S);
-  L := Length(US) div 3;
-  S1 := Copy(US, 1, L);
-  S2 := Copy(US, L + 1, L);
-  S3 := Copy(US, 2 * L + 1, length(S));
-  S1 := UTF8Encode(S1);
-  S2 := UTF8Encode(S2);
-  S3 := UTF8Encode(S3);
+  s := CharsetConversion(SendSelectedMemo2.Text, GetCurCP, UTF_8);
+  us := UTF8Decode(s);
+  len := Length(us) div 3;
+  s1 := Copy(us, 1, len);
+  s2 := Copy(us, len + 1, len);
+  s3 := Copy(us, 2 * len + 1, length(s));
+  s1 := UTF8Encode(s1);
+  s2 := UTF8Encode(s2);
+  s3 := UTF8Encode(s3);
   fServer.LockTermination;
-  for I := 0 to ConnectionList.Items.Count - 1 do
-  begin
-    if ConnectionList.Items[I].Selected then
+  for i := 0 to ConnectionList.Items.Count - 1 do
+    if ConnectionList.Items[i].Selected then
     begin
-      C := TWebSocketCustomConnection(ConnectionList.Items[I].Data);
-      C.SendText(S1, False);
-      C.SendTextContinuation(S2, False);
-      C.SendTextContinuation(S3, True);
+      c := TWebSocketCustomConnection(ConnectionList.Items[i].Data);
+      c.SendText(s1, False);
+      c.SendTextContinuation(s2, False);
+      c.SendTextContinuation(s3, True);
     end;
-  end;
   fServer.UnLockTermination;
 end;
 
 { TTestWebSocketServer }
 
 function TTestWebSocketServer.GetWebSocketConnectionClass(Socket: TTCPCustomConnectionSocket; Header: TStringList;
-  ResourceName, Host, Port, Origin, Cookie: String; out HttpResult: Integer;
-  var Protocol, Extensions: String): TWebSocketServerConnections;
+  ResourceName, Host, Port, Origin, Cookie: string; out HttpResult: Integer;
+  var Protocol, Extensions: string): TWebSocketServerConnections;
 begin
   Result := TTestWebSocketServerConnection;
 end;
