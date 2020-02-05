@@ -132,7 +132,7 @@ type
     fPort: string;
     fCanAddConnection: Boolean;
     fConnections: TList;
-    fConnectionTermLock: TCriticalSection;
+    fConnectionTermLock: syncobjs.TCriticalSection;
     fCurrentAddConnection: TCustomConnection;
     fCurrentRemoveConnection: TCustomConnection;
     fCurrentSocket: TTCPBlockSocket;
@@ -246,7 +246,7 @@ type
 implementation
 
 uses
-  SynSock {$IFDEF WIN32}, Windows {$ENDIF WIN32};
+  SynSock {$IFDEF WINDOWS}, Windows {$ENDIF};
 
 var
   fConnectionsIndex: Integer = 0;
@@ -365,7 +365,7 @@ begin
   fPort := aPort;
   FreeOnTerminate := True;
   fConnections := TList.Create;
-  fConnectionTermLock := TCriticalSection.Create;
+  fConnectionTermLock := syncobjs.TCriticalSection.Create;
   fMaxConnectionsCount := -1;
   fCanAddConnection := True;
   fCurrentAddConnection := nil;
@@ -530,7 +530,7 @@ begin
     try
       OnConnectionTerminate(c);
       c.TerminateThread;
-{$IFDEF WIN32}
+{$IFDEF WINDOWS}
       WaitForSingleObject(c.Handle, 100);
 {$ELSE}
       Sleep(100);

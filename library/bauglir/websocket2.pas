@@ -155,7 +155,7 @@ type
     fWriteRes3: Boolean;
     fWriteCode: Integer;
     fWriteStream: TMemoryStream;
-    fSendCriticalSection: TCriticalSection;
+    fSendCriticalSection: syncobjs.TCriticalSection;
     fFullDataProcess: Boolean;
     fFullDataStream: TMemoryStream;
     function GetClosed: Boolean;
@@ -489,9 +489,9 @@ type
 implementation
 
 uses
-  Math, synautil, synacode, synsock, {$IFDEF WIN32}Windows,{$ENDIF} BClasses, synachar;
+  Math, synautil, synacode, synsock, {$IFDEF WINDOWS}Windows,{$ENDIF} BClasses, synachar;
 
-{$IFDEF WIN32}{$O-}{$ENDIF}
+{$IFDEF WINDOWS}{$O-}{$ENDIF}
 
 function httpCode(code: Integer): string;
 begin
@@ -573,14 +573,14 @@ end;
 
 procedure ODS(aStr: string); overload;
 begin
-  {$IFDEF WIN32}
+  {$IFDEF WINDOWS}
   OutputDebugString(PChar(FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + ': ' + aStr));
   {$ENDIF}
 end;
 
 procedure ODS(aStr: string; aData: array of const); overload;
 begin
-  {$IFDEF WIN32}
+  {$IFDEF WINDOWS}
   ODS(Format(aStr, aData));
   {$ENDIF}
 end;
@@ -884,7 +884,7 @@ begin
   fWriteStream := TMemoryStream.Create;
   fFullDataProcess := False;
   fFullDataStream := TMemoryStream.Create;
-  fSendCriticalSection := TCriticalSection.Create;
+  fSendCriticalSection := syncobjs.TCriticalSection.Create;
   fHandshake := False;
   inherited;
 end;
